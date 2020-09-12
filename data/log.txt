@@ -1,0 +1,34 @@
+cellcounts.tab, 23.06.2020:
+Data in cellcounts.tab extracted manually from 200605-181012-181120-countingcellnumbers-cellcompetition-experiments,
+which stems from /lineagetracing and modelling organoid growth/Data/200615-reanalysis-FACS and cell counts GGTT KO mixtures/200605-181012-181120-countingcellnumbers-cellcompetition-experiments.xlsx in the Dropbox folder
+
+celltypes.tab, 23.06.2020:
+Data in celltypes.tab extracted manually from 200605-181012-181120-countingcellnumbers-cellcompetition-experiments,
+which stems from /lineagetracing and modelling organoid growth/Data/200615-reanalysis-FACS and cell counts GGTT KO mixtures/200605-181012-181120-countingcellnumbers-cellcompetition-experiments.xlsx in the Dropbox folder
+
+organoidsizes.tab, 10.9.2020:
+Data in organoidsizes.tab is based H9_WT_sizes_area_measurments.xslx, which was converted to
+the tab-separated file H9_WT_sizes_area_measurments.tab, and on the FACS counts from cellcounts.tab per
+23.06.2020. The data was processed with the following R snippet to generate organoidsizes.tab:
+  ta <- data.table(read.table("data/H9_WT_sizes_area_measurments.tab", sep="\t", header=T, check.names=F))[, list(
+    day=as.integer(substr(`Day`, 4, 6)), source="area", rep=paste0("b", trimws(substr(`Batch`, 6, 8))), count=`Volume`
+  )]
+  tf <- data.table(read.table("data/cellcounts.tab", header=TRUE, sep="\t"))[, list(
+    day, source="facs", rep, count
+  )]
+  # Scaling factor is based on the (interpolated) FACS count for day 10.
+  # The 'hq' column indicates which estimates are "high-quality" and should be used
+  s <- exp((3/4)*mean(tf[day==9, log(count)])+(1/4)*mean(tf[day==13, log(count)])-mean(ta[day==10, log(count)]))
+  t <- rbind(tf, ta[, list(day, source, rep, count=round(s*count))])[, list(
+    day, source, rep, count, hq=((source=="facs") & (day < 25)) | (source=="area")
+  )]
+  write.table(t[order(day, source, rep, hq, count)], file="data/organoidsizes.tab", sep="\t", quote=F, row.names=F)
+Note that averaging and fitting were all performed in the logspace, this should reduce the effect
+of any outliers that may be present, and is consistant with logarithmic plotting and errorbars.
+Variances can also be assumed to be more homogenous in logspace for this dataset.
+
+lineagetracing_H9_only.tsv, 12.09.2020:
+Contains the results of the lineagetracing experiment LT47, analyzed with Benoit Schroeders pipeline.
+
+lt47.rd, 12.09.2020:
+Produced using lt47.R from lineagetracing_H9_only.tsv as of 12.09.2020
