@@ -24,7 +24,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
       -o Dpkg::Options::="--force-confdef" \
       -o Dpkg::Options::="--force-confold" \
       --no-install-recommends  \
-      r-base-core && \
+      r-base r-recommended r-base-dev libcurl4-openssl-dev libssl-dev libxml2-dev && \
     curl -# -O https://download3.rstudio.org/ubuntu-14.04/x86_64/shiny-server-${VER_SHINY_SERVER}-amd64.deb && \
     dpkg --install shiny-server-${VER_SHINY_SERVER}-amd64.deb && \
     rm -r /var/lib/shiny-server /var/log/shiny-server /srv/shiny-server \
@@ -33,25 +33,27 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
     apt-get purge -qq -y curl && \
     apt autoremove -qq -y
 
-# Install R packages
-# Note that we leave the -dev packages installed, because the inline package
-# might need them, and it will definitely need the compiler and binutils.
+# Install basic R packages
 RUN export DEBIAN_FRONTEND=noninteractive && \
-    apt-get update -qq && \
-    apt-get install -qq -y \
-      -o Dpkg::Options::="--force-confdef" \
-      -o Dpkg::Options::="--force-confold" \
-      --no-install-recommends  \
-      r-base-dev libcurl4-openssl-dev libssl-dev libxml2-dev && \
     R -e "install.packages(c( \
-        'devtools', 'inline', \
-        'data.table', 'Hmisc', 'ggplot2', 'Deriv', 'lamW', \
-        'shiny', 'shinycssloaders', 'DT', 'rhandsontable' \
+        'data.table', 'MASS', 'VGAM', 'Hmisc', 'Deriv', 'lamW' \
+      ), repos='https://cran.rstudio.com/')"
+
+# Install R packages data.table, inline, shiny, ggplot2 and extensions
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    R -e "install.packages(c( \
+        'data.table', 'inline', \
+        'shinycssloaders', 'DT', 'rhandsontable', \
+        'ggplot2', 'cowplot', 'gridExtra' \
+      ), repos='https://cran.rstudio.com/')"
+
+# Install R packages not on CRAN via devtools
+RUN export DEBIAN_FRONTEND=noninteractive && \
+    R -e "install.packages(c( \
+        'devtools' \
       ), repos='https://cran.rstudio.com/')" && \
     R -e "library(devtools); install_github('schaffman5/shinyTree', ref='e41e200437d828faf203c22b98f9f6d6cac58206')" && \
-    R -e "library(devtools); install_github('Cibiv/gwpcR', ref='v0.9.10')" && \
-    apt-get clean && \
-    apt autoremove -qq -y
+    R -e "library(devtools); install_github('Cibiv/gwpcR', ref='v0.9.10')"
 
 # Remover all users but root and nobody
 RUN find ./ -mount -a \( \( ! -uid 0 \) -o \( ! -gid 0 \) \) -print0 | \
