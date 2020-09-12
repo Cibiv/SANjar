@@ -45,7 +45,7 @@ RUN export DEBIAN_FRONTEND=noninteractive && \
       r-base-dev libcurl4-openssl-dev libssl-dev libxml2-dev && \
     R -e "install.packages(c( \
         'devtools', 'inline', \
-        'data.table', 'ggplot2', 'Deriv', 'lamW', \
+        'data.table', 'Hmisc', 'ggplot2', 'Deriv', 'lamW', \
         'shiny', 'shinycssloaders', 'DT', 'rhandsontable' \
       ), repos='https://cran.rstudio.com/')" && \
     R -e "library(devtools); install_github('schaffman5/shinyTree', ref='e41e200437d828faf203c22b98f9f6d6cac58206')" && \
