@@ -1,14 +1,11 @@
 #!/bin/bash
 
-# Create shiny user & group with the uid/gid of the user running the container
-export LD_PRELOAD='/usr/lib/libnss_wrapper.so'
-export NSS_WRAPPER_PASSWD="$(mktemp)"
-export NSS_WRAPPER_GROUP="$(mktemp)"
-echo "shiny:x:$(id -u):$(id -g):Shiny Server:/state:/bin/false" > "$NSS_WRAPPER_PASSWD"
-echo "shiny:x:$(id -g):" > "$NSS_WRAPPER_GROUP"
-
-# Create necessary directories
-mkdir -p /state/log /state/bookmarks
+(cd /sanmodelexplorer/parametersets.dist; find . -type -f -name "*.rd" -print0) | \
+while read -d $'\0' -r ps ; do
+	if ! test -e "/sanmodelexplorer/parametersets/$ps"; then
+		cp "/sanmodelexplorer/parametersets.dist/$ps" "/sanmodelexplorer/parametersets/"
+	fi
+done
 
 # Run server
 exec $*
