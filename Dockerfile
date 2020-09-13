@@ -22,9 +22,13 @@ RUN R -e "install.packages(c( \
         'data.table', 'MASS', 'VGAM', 'Hmisc', 'Deriv', 'lamW' \
       ), repos='https://cloud.r-project.org/')"
 
+# Install inline package
+RUN R -e "install.packages(c( \
+        'inline', 'Rcpp', 'RcppEigen' \
+      ), repos='https://cloud.r-project.org/')"
+
 # Install R packages data.table, inline, shiny, ggplot2 and extensions
 RUN R -e "install.packages(c( \
-        'data.table', 'inline', \
         'shinycssloaders', 'DT', 'rhandsontable', \
         'ggplot2', 'scales', 'cowplot', 'gridExtra' \
       ), repos='https://cloud.r-project.org/')"
