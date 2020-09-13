@@ -444,15 +444,16 @@ function(input, output, session) {
 
         # Plot results
         ggplot(data=as.data.table(r)) +
-            geom_line(aes(x=t, y=S+A+N, col='total size in model')) +
-            geom_line(aes(x=t, y=S, col='S-cells in model')) +
-            geom_line(aes(x=t, y=A, col='A-cells in model')) +
-            geom_line(aes(x=t, y=N, col='N-cells in model')) +
-            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col=I('total size in experiment')), fun=mean, geom="point") +
-            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count), fun.data=mean_sdl, geom="errorbar", width=0.5, col="purple") +
-            my_scale_log10(scale_y_log10, limits=c(1e2, 1e7)) +
-            scale_color_manual(breaks=c('total size in experiment', 'total size in model',
-                                        'S-cells in model', 'A-cells in model', 'N-cells in model'),
+            geom_line(aes(x=t, y=S+A+N, col='mod.C')) +
+            geom_line(aes(x=t, y=S, col='mod.S')) +
+            geom_line(aes(x=t, y=A, col='mod.A')) +
+            geom_line(aes(x=t, y=N, col='mod.N')) +
+            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col=I('exp.C')), fun=mean, geom="point") +
+            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col=I('exp.C')), fun.data=mean_sdl, geom="errorbar", width=0.5) +
+            my_scale_log10(scale_y_log10, limits=c(1e2, 1e7), oob=oob_keep) +
+            scale_color_manual(breaks=c('exp.C', 'mod.C', 'mod.S', 'mod.A', 'mod.N'),
+                               labels=c('total cells (experiment)', 'total cells (model)',
+                                        'S-cells (model)', 'A-cells (model)', 'N-cells (model)'),
                                values=c('purple', 'black', 'blue', 'orange', 'green'),
                                name=NULL) +
             xlab("time [days]") +
@@ -537,14 +538,14 @@ function(input, output, session) {
         
         # Plot results
         p <- ggplot() +
-            geom_line(data=lsd, aes(x=t, y=nlineages, col='all lineages in model')) +
-            geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='lineages w/ S-cells in model')) +
-            stat_summary(data=NLINEAGES, aes(x=day, y=nlineages, col=I('all lineages obs. in experiment')), fun=mean, geom="point") +
-            stat_summary(data=NLINEAGES, aes(x=day, y=nlineages), fun.data=mean_sdl, geom="errorbar", width=0.5, col="purple") +
-            scale_color_manual(breaks=c('all lineages obs. in experiment',
-                                        'all lineages in model', 'lineages w/ S-cells in model',
-                                        'lineages obs. in model+PCR+seq'),
-                               values=c('purple', 'black', 'blue', 'darkred'),
+            geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all')) +
+            geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='mod.S')) +
+            stat_summary(data=NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun=mean, geom="point") +
+            stat_summary(data=NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun.data=mean_sdl, geom="errorbar", width=0.5) +
+            scale_color_manual(breaks=c('exp.obs', 'mod.obs', 'mod.all', 'mod.S'),
+                               labels=c('obs. lineages (experiment)', 'obs. lineages (model+PCR+seq)',
+                                        'all lineages (model)', 'lineages w/ S-cells (model)'),
+                               values=c('purple', 'darkred', 'black', 'blue'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages") +
@@ -552,12 +553,10 @@ function(input, output, session) {
             guides(col=guide_legend(ncol=1,byrow=FALSE))
         if (!is.null(san_simulation_with_pcr_filtered())) {
             lsd_pcr <- san_simulation_with_pcr_filtered()[, list(nlineages=.N), by="t"]
-            p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='lineages obs. in model+PCR+seq'))
+            p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'))
         }
         if (input$stochastic_nlineages_logy)
             p <- p + my_scale_log10(scale_y_log10)
-
-        
         p
     })
 }
