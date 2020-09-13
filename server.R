@@ -95,30 +95,49 @@ function(input, output, session) {
     output_rates <- reactiveVal(RATES.EMPTY)
     
     # The current rates table, includes updates performed via the UI
-    input_rates <- reactive({
+    input_rates <- reactiveVal(RATES.EMPTY)
+    updateRateInput <- function(session, value, alwaysUpdateOutputAsWell=FALSE) {
+        output.updated <- FALSE
+        output.update.maybe.once <- function(v) {
+            if (!alwaysUpdateOutputAsWell || output.updated)
+                return()
+            output_rates(v)
+            output.updated <<- TRUE
+        }
+        if (nrow(value) == 0) {
+            input_rates(RATES.EMPTY)
+            output.update.maybe.once(value)
+            return()
+        }
+        if (any(is.na(value$Tmax))) {
+            # Ignore any row where Tmax is NA, and if such rows are present, don't reorder
+            # Must update the output before removing rows
+            output.update.maybe.once(value)
+            value <- value[!is.na(Tmax)]
+        } else if (is.unsorted(value$Tmax)) {
+            # If all rows specify Tmax but they are out of order, reorder them
+            # We always update the output in this case, otherwise users would have to reorder manually
+            value <- value[order(Tmax)]
+            output_rates(value)
+            output.updated <<- TRUE
+        }
+        # Update the output before filling in missing values
+        output.update.maybe.once(value)
+        # Fill empty cells with surrounding values
+        for(c in SAN.RATENAMES) {
+            # Fetch row corresponding to rate x
+            x <- value[[c]]
+            x.set <- !is.na(x)
+            # Set empty entries to the next non-empty entry or zero if no such entry exists
+            value[[c]] <- c(x[x.set], 0)[c(1, head(cumsum(x.set) + 1, n=-1))]
+        }
+        input_rates(value)
+    }
+    observeEvent(input$rates, {
         if (is.null(input$rates))
             return(RATES.EMPTY)
         message("Rates table was updated via the UI")
-        r <- as.data.table(hot_to_r(input$rates))
-        if (nrow(r) == 0)
-            return(RATES.EMPTY)
-        if (any(is.na(r$Tmax))) {
-            # Ignore any row where Tmax is NA, and if such rows are present, don't reorder
-            r <- r[!is.na(Tmax)]
-        } else if (is.unsorted(r$Tmax)) {
-            # If all rows specify Tmax but they are out of order, reorder them
-            r <- r[order(Tmax)]
-            output_rates(r)
-        }
-        # Fill empty cells with surrounding values
-        for(c in SAN.RATENAMES) {
-            # Fetch row corresponding to rate r
-            v <- r[[c]]
-            v.set <- !is.na(v)
-            # Set empty entries to the next non-empty entry or zero if no such entry exists
-            r[[c]] <- c(v[v.set], 0)[c(1, head(cumsum(v.set) + 1, n=-1))]
-        }
-        r
+        updateRateInput(session, as.data.table(hot_to_r(input$rates)), alwaysUpdateOutputAsWell=FALSE)
     })
 
     # The final time, which is the Tmax in the last row of the rates table
@@ -296,7 +315,7 @@ function(input, output, session) {
         if (!is.null(parameterset.loaded$s0) && !is.samevalue(parameterset.loaded$s0, input$s0))
             updateNumericInput(session, "s0", value=parameterset.loaded$s0)
         if (!is.null(parameterset.loaded$rates) && (!are.rates.identical(parameterset.loaded$rates, as.data.table(hot_to_r(input$rates)))))
-            output_rates(parameterset.loaded$rates)
+            updateRateInput(session, value=parameterset.loaded$rates, alwaysUpdateOutputAsWell=TRUE)
         if (!is.null(parameterset.loaded$pcr_efficiency) && !is.samevalue(parameterset.loaded$pcr_efficiency, input$pcr_efficiency))
             updateNumericInput(session, "pcr_efficiency", value=parameterset.loaded$pcr_efficiency)
         if (!is.null(parameterset.loaded$library_size) && !is.samevalue(parameterset.loaded$library_size, input$library_size))
