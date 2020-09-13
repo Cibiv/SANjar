@@ -17,14 +17,14 @@ RUN apt-get update && apt-get install -y \
     libssl1.0.0 \
     libxml2-dev
 
+# Install inline package and anything that might be usefull or is a common dependency
+RUN R -e "install.packages(c( \
+        'inline', 'Rcpp', 'RcppParallel', 'RcppEigen', 'RcppArmadillo' \
+      ), repos='https://cloud.r-project.org/')"
+
 # Install basic R packages
 RUN R -e "install.packages(c( \
         'data.table', 'MASS', 'VGAM', 'Hmisc', 'Deriv', 'lamW' \
-      ), repos='https://cloud.r-project.org/')"
-
-# Install inline package
-RUN R -e "install.packages(c( \
-        'inline', 'Rcpp', 'RcppEigen' \
       ), repos='https://cloud.r-project.org/')"
 
 # Install R packages data.table, inline, shiny, ggplot2 and extensions
