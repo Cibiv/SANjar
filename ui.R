@@ -3,11 +3,6 @@ library(rhandsontable)
 library(shinycssloaders)
 
 fluidPage(
-    withMathJax(),
-    HTML(paste0("<script type='text/x-mathjax-config'>",
-                "MathJax.Hub.Config({tex2jax: {inlineMath: [['$','$'], ['\\(','\\)']]}});",
-                "</script>")),
-    
     # Application title
     titlePanel("SAN Model Explorer"),
     
@@ -18,11 +13,11 @@ fluidPage(
                  fluidRow(column(width=6,
                                  tags$label(class="control-label", "Rates"),
                                  rHandsontableOutput("rates", width="450px"),
-                                 helpText(HTML("At each point in time, the non-empty rate specified for the ",
-                                          "smallest T<sub>max</sub> that still lies in the future applies, ",
-                                          "or zero if no such non-empty rate exists. Empty cells thus effectively ",
-                                          "contain the value from the <i>next</i> non-empty row, or zero if ",
-                                          "they are the last empty cell in the respective column."))),
+                                 helpText(HTML("At each time <i>t</i> and for each rate (i.e. column), the first ",
+                                          "non-empty value whose <i>T</i><sub>max</sub> is larger than <i>t</i> applies, ",
+                                          "or zero if no such value exists. Empty cells thus effectively contain the ",
+                                          "first non-empty value <i>below</i> the empty cell, or zero if all following ",
+                                          "values are empty as well."))),
                           column(width=6,
                                  numericInput("s0", HTML("Initial number of cells (s<sub>0</sub>)"), min=1, max=3e4, value=0))),
                  fluidRow(column(width=12,
