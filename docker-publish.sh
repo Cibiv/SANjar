@@ -28,11 +28,3 @@ docker tag "$img_tag" "$publish_tag" || exit 1
 
 echo "*** Publishing $publish_tag"
 docker push "$publish_tag" || exit 1
-
-echo "*** Disabling and stopping all sanmodelexplorer instances on minsky"
-ssh minsky sudo systemctl stop "sanmodelexplorer@*" || exit 1
-ssh minsky sudo systemctl disable "sanmodelexplorer@*" || exit 1
-
-echo "*** Enabling and starting sanmodelexplorer@r$rev on minsky"
-ssh minsky sudo systemctl enable "sanmodelexplorer@r$rev" || exit 1
-ssh minsky sudo systemctl start "sanmodelexplorer@r$rev" || exit 1
