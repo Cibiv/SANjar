@@ -26,7 +26,7 @@ RUN R -e "install.packages(c( \
 RUN R -e "install.packages(c( \
         'data.table', 'inline', \
         'shinycssloaders', 'DT', 'rhandsontable', \
-        'ggplot2', 'cowplot', 'gridExtra' \
+        'ggplot2', 'scales', 'cowplot', 'gridExtra' \
       ), repos='https://cloud.r-project.org/')"
 
 # Install R packages not on CRAN via devtools
