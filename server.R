@@ -97,6 +97,10 @@ function(input, output, session) {
     # The current rates table, includes updates performed via the UI
     input_rates <- reactiveVal(RATES.EMPTY)
     updateRateInput <- function(session, value, alwaysUpdateOutputAsWell=FALSE) {
+        input.update <- function(v) {
+            if (!are.rates.identical(isolate(input_rates()), v))
+                input_rates(v)
+        }
         output.updated <- FALSE
         output.update.maybe.once <- function(v) {
             if (!alwaysUpdateOutputAsWell || output.updated)
@@ -105,8 +109,8 @@ function(input, output, session) {
             output.updated <<- TRUE
         }
         if (nrow(value) == 0) {
-            input_rates(RATES.EMPTY)
-            output.update.maybe.once(value)
+            input.update(RATES.EMPTY)
+            output.update.maybe.once(RATES.EMPTY)
             return()
         }
         if (any(is.na(value$Tmax))) {
@@ -131,7 +135,7 @@ function(input, output, session) {
             # Set empty entries to the next non-empty entry or zero if no such entry exists
             value[[c]] <- c(x[x.set], 0)[c(1, head(cumsum(x.set) + 1, n=-1))]
         }
-        input_rates(value)
+        input.update(value)
     }
     observeEvent(input$rates, {
         if (is.null(input$rates))
