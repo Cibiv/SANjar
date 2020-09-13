@@ -436,8 +436,12 @@ function(input, output, session) {
             return()
         
         # Evaluate deterministic SAN model
+        # We cut cell counts off at 0.1 to avoid plotting problems
         r <- evaluate_deterministic_san(s0=input$s0, rates=input_rates_list(), samples_per_day=10)
-        
+        r[, S := pmax(S, 1) ]
+        r[, A := pmax(A, 1) ]
+        r[, N := pmax(N, 1) ]
+
         # Plot results
         ggplot(data=as.data.table(r)) +
             geom_line(aes(x=t, y=S+A+N, col='total size in model')) +
