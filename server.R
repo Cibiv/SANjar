@@ -430,6 +430,7 @@ function(input, output, session) {
 
     # Deterministic model dynamics
     output$deterministic <- renderPlot({
+        message("Updating deterministic model dynamics plot ")
         # Do nothing if the rates table is empty
         if (length(input_rates_list()) == 0)
             return()
@@ -467,6 +468,7 @@ function(input, output, session) {
     
     # Lineage size distribution
     output$stochastic_lsd <- renderPlot({
+        message("Updating rank-abundance plot of the lineage size distribution ")
         if (is.null(san_simulation()))
             return()
 
@@ -522,6 +524,7 @@ function(input, output, session) {
     })
     
     output$stochastic_nlineages <- renderPlot({
+        message("Updating number-of-lineages plot ")
         if (is.null(san_simulation()))
             return()
         
