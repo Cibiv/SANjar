@@ -22,9 +22,15 @@ echo "*** Building image $img_tag"
 docker build -t "$img_tag" "$(dirname $BASH_SOURCE)" || exit 1
 img_hash="$(docker images -q "$img_tag")"
 
-publish_tag="minsky:5000/$img_tag"
-echo "*** Tagging image $img_tag (hash $img_hash) for publication as $publish_tag"
-docker tag "$img_tag" "$publish_tag" || exit 1
+publish_rev_tag="minsky:5000/$img_tag"
+publish_latest_tag="minsky:5000/sanmodelexplorer:latest"
+echo "*** Tagging image $img_tag (hash $img_hash) for publication as $publish_rev_tag and as $publish_latest_tag"
+docker tag "$img_tag" "$publish_rev_tag" || exit 1
+docker tag "$img_tag" "$publish_latest_tag" || exit 1
 
-echo "*** Publishing $publish_tag"
-docker push "$publish_tag" || exit 1
+echo "*** Publishing $publish_rev_tag"
+docker push "$publish_rev_tag" || exit 1
+docker push "$publish_latest_tag" || exit 1
+
+echo "*** Pulling new image on minsky, shinyproxy should use it automatically"
+ssh minsky docker pull --quiet "$publish_latest_tag" || exit 1
