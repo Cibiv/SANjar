@@ -15,6 +15,29 @@ FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
 # Location to store the parameter sets in
 LOCATION.PARAMETERSETS <- "parametersets"
 
+# Return a list of saved parameter sets
+parametersets.list <- function() {
+    files <- list.files(file.path(LOCATION.PARAMETERSETS))
+    p <- "\\.rd$"
+    sub(x=files[grepl(p, files)], pattern=p, replacement="")
+}
+
+# Convert a parameterset name to a full path
+parameterset.fullpath <- function(name) {
+    file.path(LOCATION.PARAMETERSETS, paste0(name, ".rd"))
+}
+
+# Default parameter set is specified by parametersets/load_by_default.txt
+DEFAULT.PARAMETERSET <- local({
+    link_fn <- file.path(LOCATION.PARAMETERSETS, "load_by_default.txt")
+    default_name <- trimws(readChar(link_fn, file.info(link_fn)$size))
+    default <- parameterset.fullpath(default_name)
+    if (file.exists(default))
+        default_name
+    else
+        character(0)
+})
+
 # Better ggplot2 logscale
 my_scale_log10 <- function(scale, ...) scale(
     breaks = scales::trans_breaks("log10", function(x) 10^x),
@@ -289,17 +312,6 @@ function(input, output, session) {
         }
     })
     
-    # Return a list of saved parameter sets
-    parametersets.list <- function() {
-        sub(x=list.files(file.path(LOCATION.PARAMETERSETS)),
-            pattern="\\.rd", replacement="")
-    }
-    
-    # Convert a parameterset name to a full path
-    parameterset.fullpath <- function(name) {
-        file.path(LOCATION.PARAMETERSETS, paste0(name, ".rd"))
-    }
-    
     # The currently loaded parameterset
     # Note that this reflects the values of the parameters at loading time
     parameterset.loaded <- NULL
@@ -333,7 +345,7 @@ function(input, output, session) {
             updateNumericInput(session, "phantom_threshold", value=parameterset.loaded$phantom_threshold)
     })
     # Load parameter set "default" on startup
-    updateSelectInput(session, "loadfrom", selected="default",
+    updateSelectInput(session, "loadfrom", selected=DEFAULT.PARAMETERSET,
                       choices=c("select set to load"="", parametersets.list()))
     
     # If a loaded parameter set is changed, don't show it as selected anymore

@@ -10,5 +10,11 @@ while read -d $'\0' -r ps ; do
 	fi
 done
 
+# Copy default dataset specification unless load_by_default.overwrite indicates we shouldn't
+if ! test -e "/sanmodelexplorer/parametersets/load_by_default.overwrite" && \
+     test -e "/sanmodelexplorer/parametersets/load_by_default.txt"; then
+	cp "/sanmodelexplorer/parametersets.dist/load_by_default.txt" "/sanmodelexplorer/parametersets/"
+fi
+
 # Run server
 exec $*
