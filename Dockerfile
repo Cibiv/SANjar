@@ -54,8 +54,8 @@ RUN mkdir -p /sanmodelexplorer && \
     ln -sf /state/parametersets /sanmodelexplorer/
 
 # Copy data
-COPY data/organoidsizes.tab     /sanmodelexplorer/data/
-COPY data/lt47.rd               /sanmodelexplorer/data/
+COPY data/lt47.processed.rd     /sanmodelexplorer/data/
+COPY data/organoidsizes.rd      /sanmodelexplorer/data/
 
 # Run App
 EXPOSE 3838

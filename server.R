@@ -15,6 +15,26 @@ FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
 # Location to store the parameter sets in
 LOCATION.PARAMETERSETS <- "parametersets"
 
+# Line width
+LWD <- 0.8
+LWD2 <- 1.2
+
+# Empty rates table
+RATES.EMPTY <- as.data.table({
+    x <- rep(list(numeric(0)), 1+length(SAN.RATENAMES))
+    names(x) <- c("Tmax", SAN.RATENAMES)
+    x
+})
+
+# ggplot2 setup
+theme_set(
+    theme_grey(base_size = 20)
+)
+
+# Load data
+load("data/organoidsizes.rd")
+load("data/lt47.processed.rd")
+
 # Return a list of saved parameter sets
 parametersets.list <- function() {
     files <- list.files(file.path(LOCATION.PARAMETERSETS))
@@ -45,10 +65,6 @@ my_scale_log10 <- function(scale, ...) scale(
     ...
 )
 
-# Line width
-LWD <- 0.8
-LWD2 <- 1.2
-
 # Transform LT47 to rank-size form
 rank_size <- function(subset) {
     subset[, {
@@ -77,45 +93,6 @@ are.rates.identical <- function(r1, r2) {
         return(FALSE)
     return(TRUE)
 }
-
-# Empty rates table
-RATES.EMPTY <- as.data.table({
-    x <- rep(list(numeric(0)), 1+length(SAN.RATENAMES))
-    names(x) <- c("Tmax", SAN.RATENAMES)
-    x
-})
-
-# Load cell count data
-ORGANOIDSIZES <- data.table(read.table("data/organoidsizes.tab", header=TRUE))
-
-# Load lineage size data
-load("data/lt47.rd")
-
-# Compute number of observed lineages at each time point
-NLINEAGES <- LT47[, list(nlineages=sum(lsize > 0)), by=c("day", "sid")] 
-
-# Estimate PCR and sequencing parameters
-GWPCR.PARAMETERS <- LT47[,
-    .SD[, list(
-        library_size=sum(lsize),
-        phantom_threshold=min(lsize)
-    ), by="sid"][, list(
-        library_size=signif(round(median(library_size)), 2),
-        phantom_threshold=round(median(phantom_threshold))
-    )]
-, by="day"]
-GWPCR.PARAMETERS[, pcr_efficiency := {
-    LT47[day==0][, {
-        gwpcrpois.est(lsize, threshold=min(lsize), molecules=1)
-    }, by="sid"][, list(
-        pcr_efficiency=signif(median(efficiency), 2)
-    )]
-}]
-
-# ggplot2 setup
-theme_set(
-    theme_grey(base_size = 20)
-)
 
 # Server logic
 function(input, output, session) {
@@ -224,10 +201,10 @@ function(input, output, session) {
     # PCR efficiency parameter
     pcr_efficiency_manual_or_auto <- reactive({
         if (!is.na(input$pcr_efficiency) && (input$pcr_efficiency >= 0) && (input$pcr_efficiency <= 1)) {
-            eff <- GWPCR.PARAMETERS[, list(pcr_efficiency=input$pcr_efficiency), keyby="day"]
+            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency=input$pcr_efficiency), keyby="day"]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- GWPCR.PARAMETERS[, list(pcr_efficiency), keyby="day"]
+            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency), keyby="day"]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -241,10 +218,10 @@ function(input, output, session) {
     # Sequencing library size parameter
     library_size_manual_or_auto <- reactive({
         if (!is.na(input$library_size) && (input$library_size > 0)) {
-            ls <- GWPCR.PARAMETERS[, list(library_size=(input$library_size)), keyby="day"]
+            ls <- LT47.GWPCR.PARAMETERS[, list(library_size=(input$library_size)), keyby="day"]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- GWPCR.PARAMETERS[, list(library_size), keyby="day"]
+            ls <- LT47.GWPCR.PARAMETERS[, list(library_size), keyby="day"]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -263,10 +240,10 @@ function(input, output, session) {
     # Sequencing read-count threshold parameter
     phantom_threshold_manual_or_auto <- reactive({
         if (!is.na(input$phantom_threshold) && (input$phantom_threshold > 0)) {
-            th <- GWPCR.PARAMETERS[, list(phantom_threshold=(input$phantom_threshold)), keyby="day"]
+            th <- LT47.GWPCR.PARAMETERS[, list(phantom_threshold=(input$phantom_threshold)), keyby="day"]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  GWPCR.PARAMETERS[, list(phantom_threshold), keyby="day"]
+            th <-  LT47.GWPCR.PARAMETERS[, list(phantom_threshold), keyby="day"]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
@@ -555,8 +532,8 @@ function(input, output, session) {
         
         # Plot results
         p <- ggplot() +
-            stat_summary(data=NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun=mean, geom="point", size=LWD) +
-            stat_summary(data=NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun=mean, geom="point", size=LWD) +
+            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD2)
             if (!is.null(san_simulation_with_pcr_filtered())) {
                 lsd_pcr <- san_simulation_with_pcr_filtered()[, list(nlineages=.N), by="t"]
