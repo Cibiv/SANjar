@@ -1,6 +1,7 @@
 library(shiny)
 library(rhandsontable)
 library(shinycssloaders)
+library(bsplus)
 
 fluidPage(
     # Application title
@@ -25,21 +26,6 @@ fluidPage(
                                  plotOutput("deterministic")))
         ),
         tabPanel("Lineage Size Distribution",
-                 fluidRow(column(width=3,
-                                 numericInput("p_cutoff", "Discretization err.", width="100%",
-                                              min=1e-6, max=1e-1, value=1e-2)),
-                          column(width=3,
-                                 numericInput("pcr_efficiency", "PCR efficiency", width="100%",
-                                              min=0, max=1, value=NA_real_, step=0.05),
-                                 htmlOutput("pcr_efficiency_auto_message")),
-                          column(width=3,
-                                 numericInput("library_size", "Library size", width="100%",
-                                              min=1, max=Inf, value=NA_real_, step=1e6),
-                                 htmlOutput("library_size_auto_message")),
-                          column(width=3,
-                                 numericInput("phantom_threshold", "Phantom threshold", width="100%",
-                                              min=1, max=Inf, value=NA_integer_, step=1),
-                                 htmlOutput("phantom_threshold_auto_message"))),
                  fluidRow(column(width=6,
                                  tags$label(class="control-label", "Lineage size distribution, model vs. data"),
                                  withSpinner(plotOutput("stochastic_lsd", width="100%")),
@@ -49,7 +35,26 @@ fluidPage(
                           column(width=6,
                                  tags$label(class="control-label", "Number of lineages, model vs. data"),
                                  withSpinner(plotOutput("stochastic_nlineages", width="100%")),
-                                 checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE)))
+                                 checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE))),
+                 fluidRow(column(width=12,
+                                 bs_button("Show/hide simulation settings") %>% bs_attach_collapse("simulation_settings"))),
+                 bs_collapse("simulation_settings",
+                             fluidRow(column(width=3,
+                                             numericInput("p_cutoff", "Discretization err.", width="100%",
+                                                          min=1e-6, max=1e-1, value=1e-2)),
+                                      column(width=3,
+                                             numericInput("pcr_efficiency", "PCR efficiency", width="100%",
+                                                          min=0, max=1, value=NA_real_, step=0.05),
+                                             htmlOutput("pcr_efficiency_auto_message")),
+                                      column(width=3,
+                                             numericInput("library_size", "Library size", width="100%",
+                                                          min=1, max=Inf, value=NA_real_, step=1e6),
+                                             htmlOutput("library_size_auto_message")),
+                                      column(width=3,
+                                             numericInput("phantom_threshold", "Phantom threshold", width="100%",
+                                                          min=1, max=Inf, value=NA_integer_, step=1),
+                                             htmlOutput("phantom_threshold_auto_message")))
+                 ),
         ),
         tabPanel("Parameter Sets",
                  fluidRow(column(width=6,

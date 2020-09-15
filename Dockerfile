@@ -41,6 +41,11 @@ RUN R -e "install.packages(c( \
     R -e "library(devtools); install_github('schaffman5/shinyTree', ref='e41e200437d828faf203c22b98f9f6d6cac58206')" && \
     R -e "library(devtools); install_github('Cibiv/gwpcR', ref='v0.9.10')"
 
+# Install additional packages
+RUN R -e "install.packages(c( \
+        'bsplus' \
+      ), repos='https://cloud.r-project.org/')"
+
 # R seettings
 COPY Rprofile.site /usr/lib/R/etc/
 
