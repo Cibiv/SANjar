@@ -38,7 +38,15 @@ find_time_step <- function(rate, p_cutoff) {
 #' columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`. The parameters in each row
 #' are in effect between the previous row's `Tmax` and the row's own `Tmax`.
 #' 
-#' @param s0 the initial number of S-cells
+#' *Note*: Typically, the deterministic SAN model is applied to a system consisting
+#' of \eqn{s_0} (\eqn{\gg 1}) initial S-cells. The point of the *stochastic* SAN model
+#' is typically to simulate the lineages arising from these cells separately, meaning
+#' that in the stochastic model, one will typically set \eqn{s_0} to 1, and \eqn{L} to
+#' the initial number of S-cells. In a way, it is thus the parameter \eqn{L} here that
+#' corresponds to the parameter \eqn{s_0} of the deterministic model. 
+#'
+#' @param L the number of lineages
+#' @param s0 the initial number of S-cells *in each lineage* (default: `1`)
 #' @param rates a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
 #'              and `r_D`  and monotonically increasing values in the column `Tmax`.
 #' @param samples_per_day the number of (equally spaced) times point per day at
@@ -144,7 +152,7 @@ san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
     #                          p_S=expm1(r$r_S*dt), p_0=expm1(r$r_0*dt), p_R=expm1(r$r_R*dt),
     #                          p_A=expm1(r$r_A*dt), p_N=expm1(r$r_N*dt), p_D=expm1(r$r_D*dt),
     #                          steps=rep(steps_per_sample, (r$Tmax - t)*samples_per_day))
-    
+
     # Append to results
     rows.res <- rbindlist(res)[, list(t=t+i/samples_per_day, dt=dt, lid=1L:L, S, A, N)]
     rows <- c(rows, list(rows.res))

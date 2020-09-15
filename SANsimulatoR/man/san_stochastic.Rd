@@ -7,7 +7,9 @@
 san_stochastic(L, s0 = 1, rates, samples_per_day = 1, p_cutoff = 0.001)
 }
 \arguments{
-\item{s0}{the initial number of S-cells}
+\item{L}{the number of lineages}
+
+\item{s0}{the initial number of S-cells *in each lineage* (default: `1`)}
 
 \item{rates}{a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
 and `r_D`  and monotonically increasing values in the column `Tmax`.}
@@ -45,4 +47,11 @@ in a memoryless fashion, making the model a Markov process.
 The picewise constant rates are specified through the table `rates` with
 columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`. The parameters in each row
 are in effect between the previous row's `Tmax` and the row's own `Tmax`.
+
+*Note*: Typically, the deterministic SAN model is applied to a system consisting
+of \eqn{s_0} (\eqn{\gg 1}) initial S-cells. The point of the *stochastic* SAN model
+is typically to simulate the lineages arising from these cells separately, meaning
+that in the stochastic model, one will typically set \eqn{s_0} to 1, and \eqn{L} to
+the initial number of S-cells. In a way, it is thus the parameter \eqn{L} here that
+corresponds to the parameter \eqn{s_0} of the deterministic model.
 }
