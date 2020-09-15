@@ -1,13 +1,11 @@
 library(data.table)
 library(Hmisc)
 library(gwpcR)
+library(SANsimulatoR)
 library(ggplot2)
 library(scales)
 library(shiny)
 library(rhandsontable)
-
-source("san_deterministic.R")
-source("san_simulate.R")
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
@@ -183,8 +181,8 @@ function(input, output, session) {
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
             message("Simulating the SAN model")
-            r <- simulate_san(L=input$s0, rates=input_rates_list(), samples_per_day=1,
-                              p_cutoff=input$p_cutoff)
+            r <- san_stochastic(L=input$s0, rates=input_rates(), samples_per_day=1,
+                                p_cutoff=input$p_cutoff)
             r[, C := S + A + N]
             r
         } else NULL
@@ -426,12 +424,12 @@ function(input, output, session) {
     output$deterministic <- renderPlot({
         message("Updating deterministic model dynamics plot ")
         # Do nothing if the rates table is empty
-        if (length(input_rates_list()) == 0)
+        if (nrow(input_rates()) == 0)
             return()
         
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
-        r <- evaluate_deterministic_san(s0=input$s0, rates=input_rates_list(), samples_per_day=10)
+        r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)
         r[, S := pmax(S, 1) ]
         r[, A := pmax(A, 1) ]
         r[, N := pmax(N, 1) ]

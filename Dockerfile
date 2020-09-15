@@ -50,8 +50,13 @@ RUN R -e "install.packages(c( \
 COPY Rprofile.site /usr/lib/R/etc/
 
 # Setup directories
-RUN mkdir -p /sanmodelexplorer && \
+RUN mkdir -p /src && \
+    mkdir -p /sanmodelexplorer && \
     ln -sf /state/parametersets /sanmodelexplorer/
+
+# Copy SANsimulatoR source and install package
+COPY SANsimulatoR /src/SANsimulatoR
+RUN R CMD INSTALL --preclean --clean /src/SANsimulatoR
 
 # Copy data
 COPY data/lt47.processed.rd     /sanmodelexplorer/data/
