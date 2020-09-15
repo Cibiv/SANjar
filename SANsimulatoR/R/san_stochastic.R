@@ -59,9 +59,6 @@ find_time_step <- function(rate, p_cutoff) {
 #' @useDynLib SANsimulatoR, .registration = TRUE
 #' @export 
 san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
-  # The names of the rate parameters
-  RATES <- c("r_S", "r_0", "r_R", "r_A", "r_N", "r_D")
-
   # Check that all necessary parameters were specified correctly
   if (!is.numeric(L) || (length(L) != 1) || (L %% 1 != 0))
     stop("L must be a single non-negative integer")
@@ -74,7 +71,7 @@ san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
   if (!is.data.frame(rates) || (nrow(rates) == 0))
     stop("rates must be a non-empty data.table (or.data.frame")
   rates <- as.data.table(rates)
-  for (c in RATES)
+  for (c in SAN.RATENAMES)
     if (!is.numeric(rates[[c]]) || !all(is.finite(rates[[c]])) || any(rates[[c]] < 0))
       stop(paste(n, " must contain non-negative and finite numeric values"))
   if (is.unsorted(rates$Tmax))
@@ -99,7 +96,7 @@ san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
       # Determine time step.
       # First, determine maximum time step that makes the probability of more than one event
       # per cell and time step less than p_cutoff
-      dt.max <- find_time_step(do.call(max, r[, ..RATES]), p_cutoff=p_cutoff)
+      dt.max <- find_time_step(do.call(max, r[, ..SAN.RATENAMES]), p_cutoff=p_cutoff)
       # Now find the smallest integral value steps_per_sample such that
       #       1/(steps_per_sample*samples_per_day) <= dt.max
       #   <=> steps_per_sample*samples_per_day >= 1/dt.max

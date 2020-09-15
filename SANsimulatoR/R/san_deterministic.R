@@ -231,31 +231,20 @@ san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
 #' @import data.table
 #' @export
 san_deterministic <- function(s0, rates, samples_per_day=1) {
-  # rates can change over times, and are therefore passed as a list of lists. Each
-  # list must specify rates r_S, r_0, r_R, r_A, r_N, r_D plus a Tmax. The Tmax must increase
-  # monotonically, and each parameter set is used for times between the previous set's
-  # Tmax and the set's own Tmax. If the list contains no nested list, or contains a value
-  # Tmax, the code assumes that only a single set or parameters is to be used for all times t.
-  if (!is.list(rates[1]) || !is.null(rates$Tmax))
-    rates <- list(rates)
-  
   # Check that all necessary parameters were specified correctly
   if (!is.numeric(samples_per_day) || (length(samples_per_day) != 1) || !is.finite(samples_per_day) || (samples_per_day <= 0) || (samples_per_day %% 1 != 0))
     stop("samples_per_day must be be a single positive and finite integral value")
   if (!is.list(rates))
     stop("rates must be a list")
-  Tmax <- 0
-  for(r in rates) {
-    # Check rates
-    for(n in SAN.RATENAMES) {
-      if (!is.numeric(r[[n]]) || (length(r[[n]]) != 1) || !is.finite(r[[n]]) || (r[[n]] < 0))
-        stop(paste(n, " must be a a single non-negative and finite numeric value"))
-    }
-    # Check Tmax
-    if (!is.numeric(r$Tmax) || (length(r$Tmax) != 1) || !is.finite(r$Tmax) || (r$Tmax < 0) || (r$Tmax %% 1 != 0) || (r$Tmax < Tmax))
-      stop(paste("Tmax must be a a single non-negative and finite numeric value, and must increase monotonically"))
-    Tmax <- r$Tmax
-  }
+  if (!is.data.frame(rates) || (nrow(rates) == 0))
+    stop("rates must be a non-empty data.table (or.data.frame")
+  rates <- as.data.table(rates)
+  for (c in SAN.RATENAMES)
+    if (!is.numeric(rates[[c]]) || !all(is.finite(rates[[c]])) || any(rates[[c]] < 0))
+      stop(paste(n, " must contain non-negative and finite numeric values"))
+  if (is.unsorted(rates$Tmax))
+    stop(paste("Tmax must contain non-negative and finite numeric values, and must increase monotonically"))
+  Tmax <- max(rates$Tmax)
   
   # Count vectors for the three cell types S, A, N
   state <- data.table(t=0, S=s0, A=0, N=0, regime=NA_character_)
@@ -270,14 +259,15 @@ san_deterministic <- function(s0, rates, samples_per_day=1) {
     while (r$Tmax <= tstart) {
       # Next set of rates
       ri <- ri + 1
-      r <- rates[[ri]]
+      r <- rates[ri]
     }
     
     # Evaluate as far as the current set of rates is valid, output the state at the end of each day
     res <- san_deterministic_eval_fixedrates(
       x0=c(S=state$S, A=state$A, N=state$N),
       times=tail(seq(from=0, to=r$Tmax - tstart, length.out=(r$Tmax - tstart + 1)*samples_per_day), n=-1),
-      rates=r)
+      rates=r
+    )
 
     # Append to results
     rows.res <- as.data.table(res)[, list(t=tstart+t, S, A, N, regime=attr(res, "regime"))]
