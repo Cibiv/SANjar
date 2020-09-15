@@ -1,0 +1,21 @@
+Package: SANsimulatoR
+Type: Package
+Title: Simulates the deterministic and stochastic versions of the SAN model
+Version: 1.0
+Date: 2020-09-15
+Author: Florian G. Pflug <florian.flug@univie.ac.at>
+Maintainer: Florian G. Pflug <florian.flug@univie.ac.at>
+Description: Simulates the deterministic and stochastic versions of the SAN model
+Encoding: UTF-8
+License: AGPL (>=3)
+Imports:
+        methods,
+        Rcpp,
+        data.table,
+        lamW
+Suggests:
+        compare,
+        testthat
+LinkingTo:
+        Rcpp
+RoxygenNote: 7.1.1
