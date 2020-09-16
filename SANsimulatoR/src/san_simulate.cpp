@@ -1,4 +1,5 @@
 #include <algorithm>
+#include <exception>
 
 #include <R.h>
 #include <Rmath.h>
@@ -86,17 +87,29 @@ List san_timediscrete_c(const List C_init,
     result.push_back(ri);
   }
 
-  /* Paralellization happens on the level of batches of L_B lineages */
+  /* Parallelisation happens on the level of lineages in batches of size L_B */
   static const int L_B = 256;
 
+#if _OPENMP
+  /* Stores the first error that occurs in any of the parallel tasks */
+  std::exception_ptr caught_exception;
+#endif
+
   #pragma omp parallel default(none)        \
-    shared(result_S_, result_A_, result_N_) \
+    shared(result_S_, result_A_, result_N_, caught_exception) \
     firstprivate(C_init_S_, C_init_A_, C_init_N_, steps, L_, \
                  p_S_, p_0_, p_R_, p_A_, p_N_, p_D_, RNG_tpl)
   {
-    /* Per-thread RNG using a thread-specific sub-sequence */
-    RNGType RNG(RNG_tpl);
-    RNG.long_jump(omp_get_thread_num() + 1);
+      /* Per-thread RNG */
+      RNGType RNG(RNG_tpl);
+
+#if _OPENMP
+      /* Use thread-specific sub-sequence of the RNG */
+      RNG.long_jump(omp_get_thread_num());
+      const bool is_master_thread = (omp_get_thread_num() == 0);
+#else
+      const bool is_master_thread = true;
+#endif
 
     /* Per-thread buffers */
     int C_batch_S[L_B], C_batch_A[L_B], C_batch_N[L_B];
@@ -104,52 +117,80 @@ List san_timediscrete_c(const List C_init,
     /* Process batches of lineages in parallel if possible */
     #pragma omp for schedule(static)
     for(int j_min=0; j_min < L_; j_min += L_B) {
-      /* Current batch contains the k lineages j_min, ..., j_max-1 */
-      const int j_max = std::min(j_min + L_B, L_);
-      const int k = j_max - j_min;
+      try {
+        /* Current batch contains the k lineages j_min, ..., j_max-1 */
+        const int j_max = std::min(j_min + L_B, L_);
+        const int k = j_max - j_min;
 
-      /* Copy inital state into thread-local buffer */
-      for(int b=0; b < k; ++b) {
-        C_batch_S[b] = C_init_S_[j_min + b];
-        C_batch_A[b] = C_init_A_[j_min + b];
-        C_batch_N[b] = C_init_N_[j_min + b];
-      }
-
-      /* Run simulation over all requested time intervals */
-      for(int i=0; i < steps.size(); ++i) {
-        /* Simulate until the end of the current interval */
-        for(int l=0, l_end = steps[i]; l < l_end; ++l) {
-          for(int b=0; b < k; ++b) {
-            /* Process b-th lineage in batch with has the index j_min + b */
-
-            /* Prevent overflows */
-            if ((C_batch_S[b] >= 1000000000) || (C_batch_A[b] >= 1000000000) || (C_batch_N[b] >= 1000000000))
-              Rcpp::stop("S, A or N cell count overflowed (>= 1,000,000,000)");
-
-            /* Determine the number of cells affected by each type of event */
-            const int dS = (p_S_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_S_) : 0;
-            const int d0 = (p_0_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_0_) : 0;
-            const int dR = (p_R_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_R_) : 0;
-            const int dA = (p_A_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_A_) : 0;
-            const int dN = (p_N_ > 0) ? rbinom_threadsafe(RNG, C_batch_A[b], p_N_) : 0;
-            const int dD = (p_D_ > 0) ? rbinom_threadsafe(RNG, C_batch_A[b], p_D_) : 0;
-
-            /* Update cell counts */
-            C_batch_S[b] = std::max(C_batch_S[b] + dS - d0 - dR - dA          , 0);
-            C_batch_A[b] = std::max(C_batch_A[b]                + dA     - dD , 0);
-            C_batch_N[b] = std::max(C_batch_N[b]           + dR      +dN + dD , 0);
-          }
-        }
-
-        /* Copy result from thread-local buffer to result vectors */
+        /* Copy initial state into thread-local buffer */
         for(int b=0; b < k; ++b) {
-          result_S_[i][j_min + b] = C_batch_S[b];
-          result_A_[i][j_min + b] = C_batch_A[b];
-          result_N_[i][j_min + b] = C_batch_N[b];
+          C_batch_S[b] = C_init_S_[j_min + b];
+          C_batch_A[b] = C_init_A_[j_min + b];
+          C_batch_N[b] = C_init_N_[j_min + b];
         }
-      } /* for(int i... */
-    } /* for(int j_min... */
+
+        /* Run simulation over all requested time intervals */
+        for(int i=0; i < steps.size(); ++i) {
+          /* Simulate until the end of the current interval */
+          for(int l=0, l_end = steps[i]; l < l_end; ++l) {
+            for(int b=0; b < k; ++b) {
+              /* Process b-th lineage in batch with has the index j_min + b */
+
+              /* Prevent overflows */
+              if ((C_batch_S[b] >= 1000000000) || (C_batch_A[b] >= 1000000000) || (C_batch_N[b] >= 1000000000))
+                Rcpp::stop("S, A or N cell count overflowed (>= 1,000,000,000)");
+
+              /* Determine the number of cells affected by each type of event */
+              const int dS = (p_S_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_S_) : 0;
+              const int d0 = (p_0_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_0_) : 0;
+              const int dR = (p_R_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_R_) : 0;
+              const int dA = (p_A_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_A_) : 0;
+              const int dN = (p_N_ > 0) ? rbinom_threadsafe(RNG, C_batch_A[b], p_N_) : 0;
+              const int dD = (p_D_ > 0) ? rbinom_threadsafe(RNG, C_batch_A[b], p_D_) : 0;
+
+              /* Update cell counts */
+              C_batch_S[b] = std::max(C_batch_S[b] + dS - d0 - dR - dA          , 0);
+              C_batch_A[b] = std::max(C_batch_A[b]                + dA     - dD , 0);
+              C_batch_N[b] = std::max(C_batch_N[b]           + dR      +dN + dD , 0);
+            }
+
+            /* Check if there was a cancel request */
+            #pragma omp cancellation point for
+          }
+
+          /* Copy result from thread-local buffer to result vectors */
+          for(int b=0; b < k; ++b) {
+            result_S_[i][j_min + b] = C_batch_S[b];
+            result_A_[i][j_min + b] = C_batch_A[b];
+            result_N_[i][j_min + b] = C_batch_N[b];
+          }
+
+          /* Allow the simulation to be interrupted. This will throw in case of an interrupt */
+          if (is_master_thread)
+            checkUserInterrupt();
+        } /* for(int i... */
+      } /* try ... */
+      catch (...) {
+#if _OPENMP
+        /* Save first error, cancel parallel tasks and re-throw on main thread */
+        #pragma omp critical (caught_exception)
+        {
+          if (!caught_exception)
+            caught_exception = std::current_exception();
+        }
+        #pragma omp cancel for
+#else
+        throw;
+#endif
+      } /* try ... catch ... */
+    } /* parallel for(int j_min... */
   }  /* omp parallel */
+
+#if _OPENMP
+  /* Throw possible pending error now that the parallel section has ended */
+  if (caught_exception)
+    std::rethrow_exception(caught_exception);
+#endif
 
   return result;
 }
