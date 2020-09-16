@@ -41,10 +41,10 @@ int rbinom_threadsafe(RNGType& rng, int n, double p) {
  * for the number(s) of steps specified in \code{steps}.
  */
 // [[Rcpp::export]]
-List san_timediscrete_c(List C_init,
-                        NumericVector p_S, NumericVector p_0, NumericVector p_R,
-                        NumericVector p_A, NumericVector p_N, NumericVector p_D,
-                        IntegerVector steps)
+List san_timediscrete_c(const List C_init,
+                        const NumericVector p_S, const NumericVector p_0, const NumericVector p_R,
+                        const NumericVector p_A, const NumericVector p_N, const NumericVector p_D,
+                        const IntegerVector steps)
 {
   /* Extract & validate parameters */
   const IntegerVector C_init_S(as<IntegerVector>(C_init["S"]));
@@ -68,7 +68,7 @@ List san_timediscrete_c(List C_init,
   const double p_D_ = DoubleVector(p_D)[0];
 
   /* Thead-local RNG template, seeded from R's RNG */
-  RNGType RNG_tpl(((uint64_t)dqrng::R_random_u32() << 32) | (uint64_t)dqrng::R_random_u32());
+  const RNGType RNG_tpl(((uint64_t)dqrng::R_random_u32() << 32) | (uint64_t)dqrng::R_random_u32());
 
   /* Prepare result and pointers to the per-interval S, A and N vectors */
   List result;
@@ -90,8 +90,9 @@ List san_timediscrete_c(List C_init,
   static const int L_B = 256;
 
   #pragma omp parallel default(none)        \
-    shared(C_init_S_, C_init_A_, C_init_N_, result_S_, result_A_, result_N_, steps, result, RNG_tpl) \
-    firstprivate(p_S_, p_0_, p_R_, p_A_, p_N_, p_D_, L_)
+    shared(result_S_, result_A_, result_N_) \
+    firstprivate(C_init_S_, C_init_A_, C_init_N_, steps, L_, \
+                 p_S_, p_0_, p_R_, p_A_, p_N_, p_D_, RNG_tpl)
   {
     /* Per-thread RNG using a thread-specific sub-sequence */
     RNGType RNG(RNG_tpl);
