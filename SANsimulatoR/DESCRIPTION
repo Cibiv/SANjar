@@ -10,12 +10,13 @@ Encoding: UTF-8
 License: AGPL (>=3)
 Imports:
         methods,
-        Rcpp,
         data.table,
         lamW
 Suggests:
         compare,
         testthat
 LinkingTo:
-        Rcpp
+        Rcpp,
+        BH,
+        dqrng
 RoxygenNote: 7.1.1
