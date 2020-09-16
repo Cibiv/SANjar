@@ -47,6 +47,12 @@ List san_timediscrete_c(const List C_init,
                         const NumericVector p_A, const NumericVector p_N, const NumericVector p_D,
                         const IntegerVector steps)
 {
+  /* Declared *first* to ensure it's destroyed last. Once the result object is gone,
+   * result is unprotected from the GC, so no allocations must occur that could trigger
+   * a GC run until the caller has protected it again.
+   */
+  List result;
+
   /* Extract & validate parameters */
   const IntegerVector C_init_S(as<IntegerVector>(C_init["S"]));
   const IntegerVector C_init_A(as<IntegerVector>(C_init["A"]));
@@ -72,7 +78,6 @@ List san_timediscrete_c(const List C_init,
   const RNGType RNG_tpl(((uint64_t)dqrng::R_random_u32() << 32) | (uint64_t)dqrng::R_random_u32());
 
   /* Prepare result and pointers to the per-interval S, A and N vectors */
-  List result;
   std::vector<int*> result_S_, result_A_, result_N_;
   for(int i=0; i < steps.size(); ++i) {
     List ri = List::create(
