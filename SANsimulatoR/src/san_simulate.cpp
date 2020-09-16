@@ -74,12 +74,17 @@ List san_timediscrete_c(const List C_init,
   const double p_N_ = DoubleVector(p_N)[0];
   const double p_D_ = DoubleVector(p_D)[0];
 
+  if (any(steps < 0).is_true())
+    stop("steps vector must be non-negative");
+  const int T = steps.size();
+  const int* const steps_ = INTEGER(steps);
+
   /* Thead-local RNG template, seeded from R's RNG */
   const RNGType RNG_tpl(((uint64_t)dqrng::R_random_u32() << 32) | (uint64_t)dqrng::R_random_u32());
 
   /* Prepare result and pointers to the per-interval S, A and N vectors */
   std::vector<int*> result_S_, result_A_, result_N_;
-  for(int i=0; i < steps.size(); ++i) {
+  for(int i=0; i < T; ++i) {
     List ri = List::create(
       Named("i") = IntegerVector(1, i+1),
       Named("S") = IntegerVector(L_, NA_INTEGER),
@@ -102,7 +107,7 @@ List san_timediscrete_c(const List C_init,
 
   #pragma omp parallel default(none)        \
     shared(result_S_, result_A_, result_N_, caught_exception) \
-    firstprivate(C_init_S_, C_init_A_, C_init_N_, steps, L_, \
+    firstprivate(C_init_S_, C_init_A_, C_init_N_, L, steps_, T, \
                  p_S_, p_0_, p_R_, p_A_, p_N_, p_D_, RNG_tpl)
   {
       /* Per-thread RNG */
@@ -135,9 +140,9 @@ List san_timediscrete_c(const List C_init,
         }
 
         /* Run simulation over all requested time intervals */
-        for(int i=0; i < steps.size(); ++i) {
+        for(int i=0; i < T; ++i) {
           /* Simulate until the end of the current interval */
-          for(int l=0, l_end = steps[i]; l < l_end; ++l) {
+          for(int l=0, l_end = steps_[i]; l < l_end; ++l) {
             for(int b=0; b < k; ++b) {
               /* Process b-th lineage in batch with has the index j_min + b */
 
