@@ -223,7 +223,7 @@ function(input, output, session) {
         max.relerr <- mod.sim.relerr.mat[which.max(abs(mod.sim.relerr.mat))]
         # Range of time steps
         min.dt <- mod.sim.agg[, min(dt, na.rm=TRUE)]
-        max.dt <- mod.sim.agg[, min(dt, na.rm=TRUE)]
+        max.dt <- mod.sim.agg[, max(dt, na.rm=TRUE)]
         # Report
         paste0(round(1/max.dt), "-", round(1/min.dt), " steps/day, ",
                "max dev=", signif(100*max.relerr, digits=2), "%, ",
