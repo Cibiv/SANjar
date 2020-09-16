@@ -57,8 +57,8 @@ List san_timediscrete_c(const List C_init,
   const IntegerVector C_init_S(as<IntegerVector>(C_init["S"]));
   const IntegerVector C_init_A(as<IntegerVector>(C_init["A"]));
   const IntegerVector C_init_N(as<IntegerVector>(C_init["N"]));
-  const int L_ = IntegerVector(C_init_S).size();
-  if ((C_init_A.size() != L_) || (C_init_N.size() != L_))
+  const int L = IntegerVector(C_init_S).size();
+  if ((C_init_A.size() != L) || (C_init_N.size() != L))
     Rcpp::stop("list C_init must contain initial count vectors S, A, N of the same length");
   const int* const C_init_S_ = INTEGER(C_init_S);
   const int* const C_init_A_ = INTEGER(C_init_A);
@@ -87,9 +87,9 @@ List san_timediscrete_c(const List C_init,
   for(int i=0; i < T; ++i) {
     List ri = List::create(
       Named("i") = IntegerVector(1, i+1),
-      Named("S") = IntegerVector(L_, NA_INTEGER),
-      Named("A") = IntegerVector(L_, NA_INTEGER),
-      Named("N") = IntegerVector(L_, NA_INTEGER)
+      Named("S") = IntegerVector(L, NA_INTEGER),
+      Named("A") = IntegerVector(L, NA_INTEGER),
+      Named("N") = IntegerVector(L, NA_INTEGER)
     );
     result_S_.emplace_back(INTEGER(ri["S"]));
     result_A_.emplace_back(INTEGER(ri["A"]));
@@ -126,10 +126,10 @@ List san_timediscrete_c(const List C_init,
 
     /* Process batches of lineages in parallel if possible */
     #pragma omp for schedule(static)
-    for(int j_min=0; j_min < L_; j_min += L_B) {
+    for(int j_min=0; j_min < L; j_min += L_B) {
       try {
         /* Current batch contains the k lineages j_min, ..., j_max-1 */
-        const int j_max = std::min(j_min + L_B, L_);
+        const int j_max = std::min(j_min + L_B, L);
         const int k = j_max - j_min;
 
         /* Copy initial state into thread-local buffer */
