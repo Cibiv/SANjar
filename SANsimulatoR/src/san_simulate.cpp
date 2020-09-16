@@ -45,6 +45,9 @@ List san_timediscrete_c(List C_init,
   int* const C_curr_A_ = INTEGER(C_curr_A);
   int* const C_curr_N_ = INTEGER(C_curr_N);
   for(int i=0; i < steps.size(); ++i) {
+    /* Time interval consists of l_end steps */
+    const int l_end = steps[i];
+
     /* Within each time intervals, lineages are process in batches of L_B lineages.
      * This facilitates parallelization, and even on a single core one can hope
      * that the overhead of copying to and from the batch buffers is made up for
@@ -52,7 +55,9 @@ List san_timediscrete_c(List C_init,
      */
     const int L_B = 64;
 
-    #pragma omp parallel
+    #pragma omp parallel default(none) \
+      shared(C_curr_S_, C_curr_A_, C_curr_N_) \
+      firstprivate(p_S_, p_0_, p_R_, p_A_, p_N_, p_D_, L_, l_end)
     {
       /* Per-thread output buffers */
       int C_batch_S[L_B], C_batch_A[L_B], C_batch_N[L_B];
@@ -72,7 +77,7 @@ List san_timediscrete_c(List C_init,
         }
         
         /* Simulate until the end of the current interval */
-        for(int l=0, l_end=steps[i]; l < l_end; ++l) {
+        for(int l=0; l < l_end; ++l) {
           for(int b=0; b < k; ++b) {
             /* Process b-th lineage in batch with has the index j_min + b */
             
