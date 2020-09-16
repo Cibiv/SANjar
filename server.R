@@ -45,6 +45,18 @@ parameterset.fullpath <- function(name) {
     file.path(LOCATION.PARAMETERSETS, paste0(name, ".rd"))
 }
 
+# Fill in empty cells in the rate table
+parameterset.fillempty <- function(value) {
+    for(c in SAN.RATENAMES) {
+        # Fetch row corresponding to rate x
+        x <- value[[c]]
+        x.set <- !is.na(x)
+        # Set empty entries to the next non-empty entry or zero if no such entry exists
+        value[[c]] <- c(x[x.set], 0)[c(1, head(cumsum(x.set) + 1, n=-1))]
+    }
+    return(value)
+}
+
 # Default parameter set is specified by parametersets/load_by_default.txt
 DEFAULT.PARAMETERSET <- local({
     link_fn <- file.path(LOCATION.PARAMETERSETS, "load_by_default.txt")
@@ -131,13 +143,7 @@ function(input, output, session) {
         # Update the output before filling in missing values
         output.update.maybe.once(value)
         # Fill empty cells with surrounding values
-        for(c in SAN.RATENAMES) {
-            # Fetch row corresponding to rate x
-            x <- value[[c]]
-            x.set <- !is.na(x)
-            # Set empty entries to the next non-empty entry or zero if no such entry exists
-            value[[c]] <- c(x[x.set], 0)[c(1, head(cumsum(x.set) + 1, n=-1))]
-        }
+        value <- parameterset.fillempty(value)
         input.update(value)
     }
     observeEvent(input$rates, {
@@ -182,10 +188,46 @@ function(input, output, session) {
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
             message("Simulating the SAN model")
             r <- san_stochastic(L=input$s0, rates=input_rates(), samples_per_day=1,
-                                p_cutoff=input$p_cutoff)
+                                p_cutoff=as.numeric(input$p_cutoff))
             r[, C := S + A + N]
             r
         } else NULL
+    })
+    p_cutoff_message <- reactive({
+        # Compute expected values for S, A, N using the deterministic model
+        mod.exp <- san_deterministic(s0=input$s0, rates=input_rates())
+        setkey(mod.exp, "t")
+        # Compute the total S, A, N cell counts from the simulation results
+        mod.sim <- san_simulation()
+        mod.sim.agg <- mod.sim[, list(
+            S=sum(S), S.sd=sd(S)*sqrt(.N),
+            A=sum(A), A.sd=sd(A)*sqrt(.N),
+            N=sum(N), N.sd=sd(N)*sqrt(.N),
+            dt=if(any(!is.na(dt))) min(dt, na.rm=TRUE) else NA_real_
+        ), keyby="t"]
+        # Compute the z-scores for the deviation of the total counts from the expectation
+        mod.sim.zscore <- mod.sim.agg[mod.exp, list(
+            S=(S - i.S) / S.sd,
+            A=(A - i.A) / A.sd,
+            N=(N - i.N) / N.sd
+        )]
+        mod.sim.zscore.mat <- as.matrix(mod.sim.zscore)
+        max.zscore <- mod.sim.zscore.mat[which.max(abs(mod.sim.zscore.mat))]
+        # Compute relative deviations of the total counts compared to the expectation
+        mod.sim.relerr <- mod.sim.agg[mod.exp, list(
+            S=(S - i.S) / i.S,
+            A=(A - i.A) / i.A,
+            N=(N - i.N) / i.N
+        )]
+        mod.sim.relerr.mat <- as.matrix(mod.sim.relerr)
+        max.relerr <- mod.sim.relerr.mat[which.max(abs(mod.sim.relerr.mat))]
+        # Range of time steps
+        min.dt <- mod.sim.agg[, min(dt, na.rm=TRUE)]
+        max.dt <- mod.sim.agg[, min(dt, na.rm=TRUE)]
+        # Report
+        paste0(round(1/max.dt), "-", round(1/min.dt), " steps/day, ",
+               "max dev=", signif(100*max.relerr, digits=2), "%, ",
+               "max z=", signif(max.zscore, digits=2), "")
     })
     
     gwpcr_parameters_interpolate <- function(p) {
@@ -450,6 +492,11 @@ function(input, output, session) {
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of cells")
+    })
+
+    # Message about simulation accuracy
+    output$p_cutoff_message <- renderUI({
+        helpText(HTML(p_cutoff_message()))
     })
 
     # Message about automatically selected parameters 
