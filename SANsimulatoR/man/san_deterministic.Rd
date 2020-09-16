@@ -24,12 +24,12 @@ a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
 \description{
 The deterministic SAN model describes the *average* behavior of the stochastic
 SAN model, and is the defined by the ODE
-\deqn{S' = (r_S - r_0 - r_R - r_A)\cdot S}
-\deqn{A' = r_A\cdot S - r_D\cdot A}
-\deqn{N' = r_R\cdot S + r_N\cdot A}
+\deqn{S' = (r_S - r_0 - r_R - r_A)\cdot S}{S' = (r_S - r_0 - r_R - r_A) * S}
+\deqn{A' = r_A\cdot S - r_D\cdot A}{A' = r_A * S - r_D * A}
+\deqn{N' = r_R\cdot S + r_N\cdot A}{N' = r_R * S + r_N * A}
 This function computes \eqn{(S(t), A(t), N(t))} from \eqn{t=0} onwards
 given \eqn{s_0=S(0)} and time-dependent but piece-wise constant rates
-\eqn{r_S}, \eqn{r_0}, \eqn{r_R}, \eqn{r_A}, \eqn{r_SN}, \eqn{r_D}.
+\eqn{r_S}, \eqn{r_0}, \eqn{r_R}, \eqn{r_A}, \eqn{r_N}, \eqn{r_D}.
 }
 \details{
 The picewise constant rates are specified through the table `rates` with

@@ -36,13 +36,13 @@ consisting of S, A and N-cells which can undergo the following conversions
 in a memoryless fashion, making the model a Markov process.
 }
 \details{
-| event                 | rate      |
-| \eqn{S \to S S}       | \eqn{r_S} |
-| \eqn{S \to \emptyset} | \eqn{r_0} |
-| \eqn{S \to N}         | \eqn{r_R} |
-| \eqn{S \to A}         | \eqn{r_A} |
-| \eqn{A \to A N}       | \eqn{r_N} |
-| \eqn{A \to N}         | \eqn{r_D} |
+| event                         | rate      |
+| \eqn{S \to S S}{S -> S S}     | \eqn{r_S} |
+| \eqn{S \to \emptyset}{S -> 0} | \eqn{r_0} |
+| \eqn{S \to N}{S -> N}         | \eqn{r_R} |
+| \eqn{S \to A}{S -> A}         | \eqn{r_A} |
+| \eqn{A \to A N}{S -> A N}     | \eqn{r_N} |
+| \eqn{A \to N}{A -> N}         | \eqn{r_D} |
 
 The picewise constant rates are specified through the table `rates` with
 columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`. The parameters in each row
