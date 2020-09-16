@@ -43,8 +43,8 @@ RUN R -e "install.packages(c( \
 
 # Install additional packages
 RUN R -e "install.packages(c( \
-        'bsplus' \
-      ), repos='https://cloud.r-project.org/')"
+        'bsplus', 'dqrng' \
+    ), repos='https://cloud.r-project.org/')"
 
 # R seettings
 COPY Rprofile.site /usr/lib/R/etc/
