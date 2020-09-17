@@ -457,8 +457,16 @@ function(input, output, session) {
     # Rate table
     output$rates <- renderRHandsontable({
         headers <- colnames(output_rates())
+        events <- list(Tmax="", r_S="S &#8594; S S", r_0="S &#8594; &empty;", r_R="S &#8594; N",
+                       r_A="S &#8594; A", r_N="A &#8594; A N", r_D="A &#8594; N")[headers]
         headers <- sub("Tmax", "T<sub>max</sub>", headers, fixed=TRUE)
         headers <- sub("^r_([A-Z0-9])$", "g<sub>\\1</sub>", headers)
+        headers <- paste0(ifelse(events!="",
+                                 paste0("<span style='white-space: nowrap;'>(",
+                                        events,
+                                        ")</span>"),
+                                 ""),
+                          "<br/>", headers)
         rhandsontable(output_rates(), useTypes=TRUE, search=FALSE, colHeaders=headers)
         # %>% hot_validate_numeric(cols=colnames(output_rates()), min=0, max=Inf)
     })
