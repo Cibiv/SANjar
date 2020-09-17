@@ -61,6 +61,7 @@ RUN R CMD INSTALL --preclean --clean /src/SANsimulatoR
 # Copy data
 COPY data/lt47.processed.rd     /sanmodelexplorer/data/
 COPY data/organoidsizes.rd      /sanmodelexplorer/data/
+COPY data/celltypes.rd          /sanmodelexplorer/data/
 
 # Run App
 EXPOSE 3838
