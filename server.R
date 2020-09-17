@@ -31,6 +31,7 @@ theme_set(
 
 # Load data
 load("data/organoidsizes.rd")
+load("data/celltypes.rd")
 load("data/lt47.processed.rd")
 
 # Return a list of saved parameter sets
@@ -463,8 +464,8 @@ function(input, output, session) {
     })
 
     # Deterministic model dynamics
-    output$deterministic <- renderPlot({
-        message("Updating deterministic model dynamics plot ")
+    output$deterministic_cellcounts <- renderPlot({
+        message("Updating deterministic cell counts plot ")
         # Do nothing if the rates table is empty
         if (nrow(input_rates()) == 0)
             return()
@@ -494,6 +495,53 @@ function(input, output, session) {
             ylab("number of cells")
     })
 
+    output$deterministic_celltypes <- renderPlot({
+        message("Updating deterministic cell types plot ")
+        # Do nothing if the rates table is empty
+        if (nrow(input_rates()) == 0)
+            return()
+        
+        # Evaluate deterministic SAN model
+        # We cut cell counts off at 0.1 to avoid plotting problems
+        r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)
+        r[, c("S", "A", "N") := list(
+            100 * pmax(S, 1) / (S+A+N),
+            100 * pmax(A, 1) / (S+A+N),
+            100 * pmax(N, 1) / (S+A+N)
+        )]
+
+        CT.CXRC4 <- CELLTYPES[antibody=="CXCR4"]
+        CT.NCAM <- CELLTYPES[antibody=="NCAM"]
+        CT.TRA160 <- CELLTYPES[antibody=="TRA1-60"]
+
+        # Plot results
+        #            my_scale_log10(scale_y_log10, limits=c(0.1, 100), oob=oob_keep) +
+        ggplot(data=as.data.table(r)) +
+            stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4', linetype='exp.CXRC4'), fun=mean, geom="line", size=LWD) +
+            stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM', linetype='exp.NCAM'), fun=mean, geom="line", size=LWD) +
+            stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160', linetype='exp.TRA160'), fun=mean, geom="line", size=LWD) +
+            stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            geom_line(aes(x=t, y=S+A, col='mod.S+A', linetype='mod.S+A'), size=LWD2) +
+            geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.N'), size=LWD2) +
+            scale_color_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
+                                        'mod.S+A', 'mod.N'),
+                               labels=c('CXRC4+ (data)', 'NCAM+ (data)', 'TRA1-60+ (data)',
+                                        'S+A (model)', 'N (model)'),
+                               values=c('brown2', 'darkcyan',  'violet', 
+                                        'black', 'darkolivegreen3'),
+                               name="") +
+            scale_linetype_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160', 'mod.S+A', 'mod.N'),
+                                 values=c('dashed', 'dashed', 'dashed', 'solid', 'solid'),
+                                 guide=NULL) +
+            xlab("time [days]") +
+            ylab("fraction of organoid [%]") +
+            guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'dashed', 'dashed', 'solid', 'solid'),
+                                                      size=c(LWD, LWD, LWD, LWD2, LWD2)),
+                                    ncol=2, byrow=FALSE))
+    })
+    
     # Message about simulation accuracy
     output$p_cutoff_message <- renderUI({
         helpText(HTML(p_cutoff_message()))

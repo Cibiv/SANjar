@@ -21,9 +21,12 @@ fluidPage(
                                           "values are empty as well."))),
                           column(width=6,
                                  numericInput("s0", HTML("Initial number of cells (s<sub>0</sub>)"), min=1, max=3e4, value=0))),
-                 fluidRow(column(width=12,
-                                 tags$label(class="control-label", "Whole-organoid growth dynamics, model vs. data"),
-                                 plotOutput("deterministic")))
+                 fluidRow(column(width=6,
+                                 tags$label(class="control-label", "Cell counts, model vs. data"),
+                                 plotOutput("deterministic_cellcounts", height="500px")),
+                          column(width=6,
+                                 tags$label(class="control-label", "Cell type composition, model vs. data"),
+                                 plotOutput("deterministic_celltypes", height="500px")))
         ),
         tabPanel("Lineage Size Distribution",
                  fluidRow(column(width=6,
