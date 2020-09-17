@@ -15,7 +15,7 @@ LOCATION.PARAMETERSETS <- "parametersets"
 
 # Line width
 LWD <- 0.8
-LWD2 <- 1.2
+LWD2 <- 1.5
 
 # Empty rates table
 RATES.EMPTY <- as.data.table({
@@ -25,9 +25,9 @@ RATES.EMPTY <- as.data.table({
 })
 
 # ggplot2 setup
-theme_set(
-    theme_grey(base_size = 20)
-)
+theme_set(theme_grey(base_size = 20))
+theme_update(legend.position="bottom",
+             legend.key.width = unit(15,"mm"))
 
 # Load data
 load("data/organoidsizes.rd")
@@ -479,20 +479,23 @@ function(input, output, session) {
 
         # Plot results
         ggplot(data=as.data.table(r)) +
-            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col=I('exp.C')), fun=mean, geom="point", size=LWD) +
-            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col=I('exp.C')), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
+            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(aes(x=t, y=S+A+N, col='mod.C'), size=LWD2) +
             geom_line(aes(x=t, y=S, col='mod.S'), size=LWD) +
             geom_line(aes(x=t, y=A, col='mod.A'), size=LWD) +
             geom_line(aes(x=t, y=N, col='mod.N'), size=LWD) +
             my_scale_log10(scale_y_log10, limits=c(1e2, 1e7), oob=oob_keep) +
             scale_color_manual(breaks=c('exp.C', 'mod.C', 'mod.S', 'mod.A', 'mod.N'),
-                               labels=c('total cells (experiment)', 'total cells (model)',
-                                        'S-cells (model)', 'A-cells (model)', 'N-cells (model)'),
+                               labels=c('total (data)', 'total (model)',
+                                        'S (model)', 'A (model)', 'N (model)'),
                                values=c('maroon', 'black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen3'),
                                name=NULL) +
             xlab("time [days]") +
-            ylab("number of cells")
+            ylab("number of cells") +
+            guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'solid', 'solid', 'solid', 'solid'),
+                                                      size=c(LWD, LWD2, LWD, LWD, LWD)),
+                                    ncol=2, byrow=FALSE))
     })
 
     output$deterministic_celltypes <- renderPlot({
@@ -529,7 +532,7 @@ function(input, output, session) {
                                         'mod.S+A', 'mod.N'),
                                labels=c('CXRC4+ (data)', 'NCAM+ (data)', 'TRA1-60+ (data)',
                                         'S+A (model)', 'N (model)'),
-                               values=c('brown2', 'darkcyan',  'violet', 
+                               values=c('brown2', 'darkcyan',  'violet',
                                         'black', 'darkolivegreen3'),
                                name="") +
             scale_linetype_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160', 'mod.S+A', 'mod.N'),
@@ -585,10 +588,9 @@ function(input, output, session) {
             my_scale_log10(scale_y_log10, limits=c(ymin, ymax)) +
             ylab("lineage size [norm. reads]") +
             annotation_logticks() +
-            scale_color_manual(breaks=c('experiment', 'model', 'model+PCR+seq'),
+            scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'black', 'gold3'),
                                name=NULL) +
-            theme(legend.position="bottom") +
             guides(col=guide_legend(ncol=3,byrow=TRUE))
         
         # Draw rank-size curves for the experimental lineage sizes in all replicates
@@ -604,12 +606,12 @@ function(input, output, session) {
             }, by="sid"]
         }
         if (nrow(rank_size.experiment) > 0)
-            plot_rank_size(rank_size.experiment, col="experiment", size=LWD)
+            plot_rank_size(rank_size.experiment, col="data", size=LWD)
         if (nrow(rank_size.model) > 0)
             plot_rank_size(rank_size.model, col="model", size=LWD2)
         if (!is.null(san_simulation_with_pcr_filtered())) {
             rank_size.model_pcr <- rank_size(san_simulation_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
-            plot_rank_size(rank_size.model_pcr, col="model+PCR+seq", size=LWD2)
+            plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
         }
         
         p
@@ -625,8 +627,8 @@ function(input, output, session) {
         
         # Plot results
         p <- ggplot() +
-            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun=mean, geom="point", size=LWD) +
-            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col=I('exp.obs')), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun=mean, geom="point", size=LWD) +
+            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD2)
             if (!is.null(san_simulation_with_pcr_filtered())) {
                 lsd_pcr <- san_simulation_with_pcr_filtered()[, list(nlineages=.N), by="t"]
@@ -635,14 +637,13 @@ function(input, output, session) {
         p <- p +
             geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='mod.S'), size=LWD) +
             scale_color_manual(breaks=c('exp.obs', 'mod.obs', 'mod.all', 'mod.S'),
-                               labels=c('obs. lineages (experiment)', 'obs. lineages (model+PCR+seq)',
-                                        'all lineages (model)', 'lineages w/ S-cells (model)'),
+                               labels=c('obs. (data)', 'obs. (model+seq.)',
+                                        'total (model)', 'w/ S-cells (model)'),
                                values=c('maroon', 'gold3', 'black', 'cornflowerblue'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages") +
-            theme(legend.position="bottom") +
-            guides(col=guide_legend(ncol=1,byrow=FALSE))
+            guides(col=guide_legend(ncol=2, byrow=FALSE))
         if (input$stochastic_nlineages_logy)
             p <- p + my_scale_log10(scale_y_log10)
         p
