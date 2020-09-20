@@ -483,25 +483,28 @@ function(input, output, session) {
 
     # Deterministic model dynamics
     output$deterministic_cellcounts <- renderPlot({
-        message("Updating deterministic cell counts plot ")
+        message("Updating deterministic cell counts plot")
         if (is.null(san_deterministic_results()))
             return()
         
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
-        r <- san_deterministic_results()
-        r[, S := pmax(S, 1) ]
-        r[, A := pmax(A, 1) ]
-        r[, N := pmax(N, 1) ]
+        r <- san_deterministic_results()[, list(
+            t,
+            C=pmax(C, 1),
+            S=pmax(S, 1),
+            A=pmax(A, 1),
+            N=pmax(N, 1)
+        )]
 
         # Plot results
-        ggplot(data=as.data.table(r)) +
+        p <- ggplot(data=r) +
             stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
             stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(aes(x=t, y=S+A+N, col='mod.C'), size=LWD2) +
-            geom_line(aes(x=t, y=S, col='mod.S'), size=LWD) +
-            geom_line(aes(x=t, y=A, col='mod.A'), size=LWD) +
-            geom_line(aes(x=t, y=N, col='mod.N'), size=LWD) +
+            geom_line(aes(x=t, y=C, col='mod.C', linetype='mod.ana'), size=LWD2) +
+            geom_line(aes(x=t, y=S, col='mod.S', linetype='mod.ana'), size=LWD) +
+            geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
+            geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.ana'), size=LWD) +
             my_scale_log10(scale_y_log10, limits=c(1e2, 1e7), oob=oob_keep) +
             scale_color_manual(breaks=c('exp.C', 'mod.C', 'mod.S', 'mod.A', 'mod.N'),
                                labels=c('total (data)', 'total (model)',
@@ -512,7 +515,31 @@ function(input, output, session) {
             ylab("number of cells") +
             guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'solid', 'solid', 'solid', 'solid'),
                                                       size=c(LWD, LWD2, LWD, LWD, LWD)),
-                                    ncol=2, byrow=FALSE))
+                                    ncol=2, byrow=FALSE),
+                   linetype=if (input$deterministic_cellcounts_incsim && !is.null(san_stochastic_results()))
+                       guide_legend(override.aes=list(size=c(LWD)),
+                                    ncol=1, byrow=FALSE)
+                   else
+                       guide_none())
+
+        if (input$deterministic_cellcounts_incsim && !is.null(san_stochastic_results())) {
+            r.sim <- san_stochastic_results()[, list(
+                C=pmax(sum(C), 1),
+                S=pmax(sum(S), 1),
+                A=pmax(sum(A), 1),
+                N=pmax(sum(N), 1)
+            ), keyby="t"]
+            p <- p + geom_line(data=r.sim, aes(x=t, y=C, col='mod.C', linetype='mod.sim'), size=LWD) +
+                geom_line(data=r.sim, aes(x=t, y=S, col='mod.S', linetype='mod.sim'), size=LWD) +
+                geom_line(data=r.sim, aes(x=t, y=A, col='mod.A', linetype='mod.sim'), size=LWD) +
+                geom_line(data=r.sim, aes(x=t, y=N, col='mod.N', linetype='mod.sim'), size=LWD) +
+                scale_linetype_manual(breaks=c('mod.ana', 'mod.sim'),
+                                      labels=c('theoretical', 'simulation'),
+                                      values=c('solid', 'dotted'),
+                                      name=NULL)
+        }
+
+        p
     })
 
     output$deterministic_celltypes <- renderPlot({
@@ -522,11 +549,11 @@ function(input, output, session) {
         
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
-        r <- san_deterministic_results()
-        r[, c("S", "A", "N") := list(
-            100 * pmax(S, 1) / C,
-            100 * pmax(A, 1) / C,
-            100 * pmax(N, 1) / C
+        r <- san_deterministic_results()[,  list(
+            t,
+            S=100 * pmax(S, 1) / C,
+            A=100 * pmax(A, 1) / C,
+            N=100 * pmax(N, 1) / C
         )]
 
         CT.CXRC4 <- CELLTYPES[antibody=="CXCR4"]

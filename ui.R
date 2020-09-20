@@ -26,7 +26,10 @@ fluidPage(
                                  plotOutput("deterministic_cellcounts", height="500px")),
                           column(width=6,
                                  tags$label(class="control-label", "Cell type composition, model vs. data"),
-                                 plotOutput("deterministic_celltypes", height="500px")))
+                                 plotOutput("deterministic_celltypes", height="500px"))),
+                 fluidRow(column(width=6,
+                                 checkboxInput("deterministic_cellcounts_incsim", width="100%",
+                                               label = "show simulated cell counts in additional to theoretical counts", value=FALSE)))
         ),
         tabPanel("Lineage Size Distribution",
                  fluidRow(column(width=6,
@@ -40,7 +43,8 @@ fluidPage(
                                  withSpinner(plotOutput("stochastic_nlineages", width="100%")),
                                  checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE))),
                  fluidRow(column(width=12,
-                                 bs_button("Show/hide simulation settings") %>% bs_attach_collapse("simulation_settings"))),
+                                 bs_button("Show/hide simulation settings") %>%
+                                     bs_attach_collapse("simulation_settings"))),
                  bs_collapse("simulation_settings",
                              fluidRow(column(width=3,
                                              selectInput("p_cutoff", "Discretization err.", width="100%",
@@ -58,7 +62,7 @@ fluidPage(
                                              numericInput("phantom_threshold", "Phantom threshold", width="100%",
                                                           min=1, max=Inf, value=NA_integer_, step=1),
                                              htmlOutput("phantom_threshold_auto_message")))
-                 ),
+                 )
         ),
         tabPanel("Parameter Sets",
                  fluidRow(column(width=6,
