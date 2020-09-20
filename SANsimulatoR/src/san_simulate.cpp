@@ -12,11 +12,14 @@
 #include <R_randgen.h>
 #include <xoshiro.h>
 #include <boost/random/binomial_distribution.hpp>
+#include <boost/random/poisson_distribution.hpp>
 
 #ifdef _OPENMP
 // [[Rcpp::plugins(openmp)]]
 #include <omp.h>
 #endif
+
+#define SAN_DELTA_DISTRIBUTION poisson
 
 using namespace Rcpp;
 
@@ -29,12 +32,16 @@ using namespace Rcpp;
  */
 typedef dqrng::xoroshiro128plus RNGType;
 
-/** Thread-save version of `R::rbinom`
- *
- */
-int rbinom_threadsafe(RNGType& rng, int n, double p) {
-  return boost::random::binomial_distribution<int>(n, p)(rng);
+inline int san_draw_delta(RNGType& rng, int n, double p) {
+#if (SAN_DELTA_DISTRIBUTION == binomial)
+  return (p > 0.0) ? boost::random::binomial_distribution<int>(n, p)(rng) : 0.0;
+#elif (SAN_DELTA_DISTRIBUTION == poisson)
+  return (p > 0.0) ? boost::random::poisson_distribution<int>(n * p)(rng) : 0.0;
+#else
+  #error "Set SAN_DELTA_DISTRIBUTION to either binomial or poisson"
+#endif
 }
+
 
 /** SAN model simulation function (internal)
  *
@@ -151,12 +158,12 @@ List san_timediscrete_c(const List C_init,
                 Rcpp::stop("S, A or N cell count overflowed (>= 1,000,000,000)");
 
               /* Determine the number of cells affected by each type of event */
-              const int dS = (p_S_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_S_) : 0;
-              const int d0 = (p_0_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_0_) : 0;
-              const int dR = (p_R_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_R_) : 0;
-              const int dA = (p_A_ > 0) ? rbinom_threadsafe(RNG, C_batch_S[b], p_A_) : 0;
-              const int dN = (p_N_ > 0) ? rbinom_threadsafe(RNG, C_batch_A[b], p_N_) : 0;
-              const int dD = (p_D_ > 0) ? rbinom_threadsafe(RNG, C_batch_A[b], p_D_) : 0;
+              const int dS = san_draw_delta(RNG, C_batch_S[b], p_S_);
+              const int d0 = san_draw_delta(RNG, C_batch_S[b], p_0_);
+              const int dR = san_draw_delta(RNG, C_batch_S[b], p_R_);
+              const int dA = san_draw_delta(RNG, C_batch_S[b], p_A_);
+              const int dN = san_draw_delta(RNG, C_batch_A[b], p_N_);
+              const int dD = san_draw_delta(RNG, C_batch_A[b], p_D_);
 
               /* Update cell counts */
               C_batch_S[b] = std::max(C_batch_S[b] + dS - d0 - dR - dA          , 0);
