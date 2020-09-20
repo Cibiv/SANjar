@@ -181,10 +181,19 @@ function(input, output, session) {
         updateSelectInput(session, "day_lsd", choices=choices, selected=sel)
     })
     
+    san_deterministic_results <- reactive({
+        # Do nothing if the rates table is empty or s0 is zero
+        if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
+            r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)
+            r[, C := S + A + N]
+            r
+        } else NULL
+    })
+
     # Simulating the stochastic model is slow, so we cache the result
     # The result is a table with columns t, S, A, N and C, where C
     # is the total organoid size, i.e. S+A+N.
-    san_simulation <- reactive({
+    san_stochastic_results <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
             message("Simulating the SAN model")
@@ -194,12 +203,13 @@ function(input, output, session) {
             r
         } else NULL
     })
+    
     p_cutoff_message <- reactive({
         # Compute expected values for S, A, N using the deterministic model
         mod.exp <- san_deterministic(s0=input$s0, rates=input_rates())
         setkey(mod.exp, "t")
         # Compute the total S, A, N cell counts from the simulation results
-        mod.sim <- san_simulation()
+        mod.sim <- san_stochastic_results()
         mod.sim.agg <- mod.sim[, list(
             S=sum(S), S.sd=sd(S)*sqrt(.N),
             A=sum(A), A.sd=sd(A)*sqrt(.N),
@@ -297,18 +307,18 @@ function(input, output, session) {
     })
     
     # Simulate PCR+Sequencing
-    san_simulation_with_pcr <- reactive({
-        if (!is.null(san_simulation())) {
+    san_stochastic_results_with_pcr <- reactive({
+        if (!is.null(san_stochastic_results())) {
             message("Simulating PCR and sequencing")
             # Days for which experimental data is available
             days <- LT47[, list(), keyby="day"]
             # Compute total number of cells in each simulated sample
-            total_sizes <- san_simulation()[, list(C.total=sum(as.numeric(C))), keyby="t"]
+            total_sizes <- san_stochastic_results()[, list(C.total=sum(as.numeric(C))), keyby="t"]
             # Simulate read counts under the gwpcR PCR model
             # The sequencing depth is computed from the total number of cells,
             # and the library size. The resulting table has the additional column
             # "R" containing the simulated read count.
-            (san_simulation()
+            (san_stochastic_results()
                 [total_sizes, on="t"]
                 [pcr_efficiency_manual_or_auto(), on=c(t="day")]
                 [library_size_manual_or_auto(), on=c(t="day")]
@@ -323,9 +333,9 @@ function(input, output, session) {
     })
     
     # Simulate read-count thresholding
-    san_simulation_with_pcr_filtered <- reactive({
-        if (!is.null(san_simulation_with_pcr())) {
-            sim <- san_simulation_with_pcr()
+    san_stochastic_results_with_pcr_filtered <- reactive({
+        if (!is.null(san_stochastic_results_with_pcr())) {
+            sim <- san_stochastic_results_with_pcr()
             sim[phantom_threshold_manual_or_auto()[sim, phantom_threshold, on=c(day="t")] <= R]
         }
     })
@@ -474,13 +484,12 @@ function(input, output, session) {
     # Deterministic model dynamics
     output$deterministic_cellcounts <- renderPlot({
         message("Updating deterministic cell counts plot ")
-        # Do nothing if the rates table is empty
-        if (nrow(input_rates()) == 0)
+        if (is.null(san_deterministic_results()))
             return()
         
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
-        r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)
+        r <- san_deterministic_results()
         r[, S := pmax(S, 1) ]
         r[, A := pmax(A, 1) ]
         r[, N := pmax(N, 1) ]
@@ -508,17 +517,16 @@ function(input, output, session) {
 
     output$deterministic_celltypes <- renderPlot({
         message("Updating deterministic cell types plot ")
-        # Do nothing if the rates table is empty
-        if (nrow(input_rates()) == 0)
+        if (is.null(san_deterministic_results()))
             return()
         
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
-        r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)
+        r <- san_deterministic_results()
         r[, c("S", "A", "N") := list(
-            100 * pmax(S, 1) / (S+A+N),
-            100 * pmax(A, 1) / (S+A+N),
-            100 * pmax(N, 1) / (S+A+N)
+            100 * pmax(S, 1) / C,
+            100 * pmax(A, 1) / C,
+            100 * pmax(N, 1) / C
         )]
 
         CT.CXRC4 <- CELLTYPES[antibody=="CXCR4"]
@@ -572,11 +580,11 @@ function(input, output, session) {
     # Lineage size distribution
     output$stochastic_lsd <- renderPlot({
         message("Updating rank-abundance plot of the lineage size distribution ")
-        if (is.null(san_simulation()))
+        if (is.null(san_stochastic_results()))
             return()
 
         # Simulate stochastic SAN model
-        rank_size.model <- rank_size(san_simulation()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0])
+        rank_size.model <- rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0])
         
         # Fetch experimental data
         rank_size.experiment <- rank_size(LT47[day==input$day_lsd])
@@ -617,8 +625,8 @@ function(input, output, session) {
             plot_rank_size(rank_size.experiment, col="data", size=LWD)
         if (nrow(rank_size.model) > 0)
             plot_rank_size(rank_size.model, col="model", size=LWD2)
-        if (!is.null(san_simulation_with_pcr_filtered())) {
-            rank_size.model_pcr <- rank_size(san_simulation_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
+        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            rank_size.model_pcr <- rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
             plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
         }
         
@@ -627,19 +635,19 @@ function(input, output, session) {
     
     output$stochastic_nlineages <- renderPlot({
         message("Updating number-of-lineages plot ")
-        if (is.null(san_simulation()))
+        if (is.null(san_stochastic_results()))
             return()
         
-        lsd <- san_simulation()[, list(nlineages=sum(C > 0)), by="t"]
-        lsd_scells <- san_simulation()[, list(nlineages=sum(S > 0)), by="t"]
+        lsd <- san_stochastic_results()[, list(nlineages=sum(C > 0)), by="t"]
+        lsd_scells <- san_stochastic_results()[, list(nlineages=sum(S > 0)), by="t"]
         
         # Plot results
         p <- ggplot() +
             stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun=mean, geom="point", size=LWD) +
             stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD2)
-            if (!is.null(san_simulation_with_pcr_filtered())) {
-                lsd_pcr <- san_simulation_with_pcr_filtered()[, list(nlineages=.N), by="t"]
+            if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+                lsd_pcr <- san_stochastic_results_with_pcr_filtered()[, list(nlineages=.N), by="t"]
                 p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'), size=LWD2)
             }
         p <- p +
