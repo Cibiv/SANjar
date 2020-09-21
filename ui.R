@@ -5,7 +5,7 @@ library(shinycssloaders)
 library(bsplus)
 
 CONTAINER_REVISION <- (if (file.exists("CONTAINER_REVISION"))
-    read_file("CONTAINER_REVISION")
+    trimws(read_file("CONTAINER_REVISION"))
 else
     NA_character_)
 
