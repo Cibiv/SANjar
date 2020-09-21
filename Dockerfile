@@ -2,6 +2,8 @@ FROM openanalytics/r-base:4.0.2
 
 MAINTAINER Florian G. Pflug <florian.pflug@univie.ac.at>
 
+ARG CONTAINER_REVISION
+
 VOLUME /state
 
 # system libraries of general use
@@ -43,7 +45,7 @@ RUN R -e "install.packages(c( \
 
 # Install additional packages
 RUN R -e "install.packages(c( \
-        'bsplus', 'dqrng' \
+        'bsplus', 'dqrng', 'readr' \
     ), repos='https://cloud.r-project.org/')"
 
 # R seettings
@@ -52,6 +54,7 @@ COPY Rprofile.site /usr/lib/R/etc/
 # Setup directories
 RUN mkdir -p /src && \
     mkdir -p /sanmodelexplorer && \
+    echo "$CONTAINER_REVISION" > /sanmodelexplorer/CONTAINER_REVISION && \
     ln -sf /state/parametersets /sanmodelexplorer/
 
 # Copy SANsimulatoR source and install package

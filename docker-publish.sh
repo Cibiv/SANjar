@@ -4,6 +4,11 @@ function die() {
 	exit 1
 }
 
+if [ "$(git symbolic-ref --short HEAD)" != "master" ]; then
+	echo "Currently checked out branch must be 'master'" >&2
+        exit 1
+fi
+
 if [ $(git status --porcelain | wc -l) != 0 ]; then
 	echo "Working copy contains uncommitted changes" >&2
 	exit 1
@@ -15,11 +20,11 @@ echo "*** Publishing revision $rev"
 
 echo "*** Tagging revision"
 git tag rev$rev || die "Unable to tag current version as rev$rev"
-git push origin rev$rev
+git push origin master rev$rev
 
 img_tag="sanmodelexplorer:r$rev"
 echo "*** Building image $img_tag"
-docker build -t "$img_tag" "$(dirname $BASH_SOURCE)" || exit 1
+docker build --build-arg CONTAINER_REVISION="rev$rev" -t "$img_tag" "$(dirname $BASH_SOURCE)" || exit 1
 img_hash="$(docker images -q "$img_tag")"
 
 publish_rev_tag="minsky:5000/$img_tag"

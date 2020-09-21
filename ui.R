@@ -1,11 +1,18 @@
+library(readr)
 library(shiny)
 library(rhandsontable)
 library(shinycssloaders)
 library(bsplus)
 
+CONTAINER_REVISION <- (if (file.exists("CONTAINER_REVISION"))
+    read_file("CONTAINER_REVISION")
+else
+    NA_character_)
+
 fluidPage(
     # Application title
-    titlePanel("SAN Model Explorer"),
+    titlePanel(paste0("SAN Model Explorer",
+                      if (!is.na(CONTAINER_REVISION)) paste0(" (", CONTAINER_REVISION ,")") else "")),
     
     # Tabs
     tabsetPanel(
