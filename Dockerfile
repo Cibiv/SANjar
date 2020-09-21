@@ -2,8 +2,6 @@ FROM openanalytics/r-base:4.0.2
 
 MAINTAINER Florian G. Pflug <florian.pflug@univie.ac.at>
 
-ARG CONTAINER_REVISION
-
 VOLUME /state
 
 # system libraries of general use
@@ -50,6 +48,8 @@ RUN R -e "install.packages(c( \
 
 # R seettings
 COPY Rprofile.site /usr/lib/R/etc/
+
+ARG CONTAINER_REVISION
 
 # Setup directories
 RUN mkdir -p /src && \
