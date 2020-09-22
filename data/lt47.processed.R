@@ -5,6 +5,9 @@ library(gwpcR)
 message("*** Loading LT47 from lt47.rd")
 load("lt47.rd")
 
+message("*** Removing low-quality samples")
+LT47 <- LT47[!(sid %in% c(15, 16))]
+
 # Compute number of observed lineages at each time point
 message("*** Computing LT47.NLINEAGES")
 LT47.NLINEAGES <- LT47[, list(nlineages=as.integer(sum(lsize > 0))), by=c("day", "sid")] 
