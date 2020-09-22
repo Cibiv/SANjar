@@ -596,13 +596,13 @@ function(input, output, session) {
             stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160', linetype='exp.TRA160'), fun=mean, geom="line", size=LWD) +
             stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(aes(x=t, y=S, col='mod.S', linetype='mod.S'), size=LWD2) +
-            geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.A'), size=LWD2) +
-            geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.N'), size=LWD2) +
-            geom_line(aes(x=t, y=S+A, col='mod.S+A'), size=LWD2) +
-            geom_line(aes(x=t, y=S+A, col='mod.A', linetype='mod.S+A'), size=LWD2) +
-            geom_line(aes(x=t, y=A+N, col='mod.A+N'), size=LWD2) +
-            geom_line(aes(x=t, y=A+N, col='mod.N', linetype='mod.A+N'), size=LWD2) +
+            geom_line(aes(x=t, y=S, col='mod.S', linetype='mod.S'), size=LWD) +
+            geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.A'), size=LWD) +
+            geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.N'), size=LWD) +
+            geom_line(aes(x=t, y=S+A, col='mod.S+A'), size=LWD) +
+            geom_line(aes(x=t, y=S+A, col='mod.A', linetype='mod.S+A'), size=LWD) +
+            geom_line(aes(x=t, y=A+N, col='mod.A+N'), size=LWD) +
+            geom_line(aes(x=t, y=A+N, col='mod.N', linetype='mod.A+N'), size=LWD) +
             scale_color_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
                                         'mod.S', 'mod.A', 'mod.N',
                                         'mod.S+A', 'mod.A+N'),
