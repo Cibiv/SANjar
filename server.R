@@ -569,22 +569,38 @@ function(input, output, session) {
             stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160', linetype='exp.TRA160'), fun=mean, geom="line", size=LWD) +
             stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(aes(x=t, y=S+A, col='mod.S+A', linetype='mod.S+A'), size=LWD2) +
+            geom_line(aes(x=t, y=S, col='mod.S', linetype='mod.S'), size=LWD2) +
+            geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.A'), size=LWD2) +
             geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.N'), size=LWD2) +
+            geom_line(aes(x=t, y=S+A, col='mod.S+A'), size=LWD2) +
+            geom_line(aes(x=t, y=S+A, col='mod.A', linetype='mod.S+A'), size=LWD2) +
+            geom_line(aes(x=t, y=A+N, col='mod.A+N'), size=LWD2) +
+            geom_line(aes(x=t, y=A+N, col='mod.N', linetype='mod.A+N'), size=LWD2) +
             scale_color_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
-                                        'mod.S+A', 'mod.N'),
+                                        'mod.S', 'mod.A', 'mod.N',
+                                        'mod.S+A', 'mod.A+N'),
                                labels=c('CXRC4+ (data)', 'NCAM+ (data)', 'TRA1-60+ (data)',
-                                        'S+A (model)', 'N (model)'),
+                                        'S (model)', 'A (model)', 'N (model)',
+                                        'S+A (model)', 'A+N (model)'),
                                values=c('brown2', 'darkcyan',  'violet',
-                                        'black', 'darkolivegreen3'),
+                                        'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen3',
+                                        'cornflowerblue', 'darkgoldenrod1'),
                                name="") +
-            scale_linetype_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160', 'mod.S+A', 'mod.N'),
-                                 values=c('dashed', 'dashed', 'dashed', 'solid', 'solid'),
+            scale_linetype_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
+                                           'mod.S', 'mod.A', 'mod.N',
+                                           'mod.S+A', 'mod.A+N'),
+                                 values=c('dashed', 'dashed', 'dashed',
+                                          'solid', 'solid', 'solid',
+                                          'dashed', 'dashed'),
                                  guide=NULL) +
             xlab("time [days]") +
             ylab("fraction of organoid [%]") +
-            guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'dashed', 'dashed', 'solid', 'solid'),
-                                                      size=c(LWD, LWD, LWD, LWD2, LWD2)),
+            guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'dashed', 'dashed',
+                                                                 'solid', 'solid', 'solid',
+                                                                 'solid', 'solid'),
+                                                      size=c(LWD, LWD, LWD,
+                                                             LWD2, LWD2, LWD2,
+                                                             LWD2, LWD2)),
                                     ncol=2, byrow=FALSE))
     })
     
