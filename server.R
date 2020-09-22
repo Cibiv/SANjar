@@ -536,7 +536,7 @@ function(input, output, session) {
             scale_color_manual(breaks=c('exp.C', 'mod.C', 'mod.S', 'mod.A', 'mod.N'),
                                labels=c('total (data)', 'total (model)',
                                         'S (model)', 'A (model)', 'N (model)'),
-                               values=c('maroon', 'black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen3'),
+                               values=c('maroon', 'black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of cells") +
@@ -610,7 +610,7 @@ function(input, output, session) {
                                         'S (model)', 'A (model)', 'N (model)',
                                         'S+A (model)', 'A+N (model)'),
                                values=c('brown2', 'darkcyan',  'violet',
-                                        'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen3',
+                                        'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4',
                                         'cornflowerblue', 'darkgoldenrod1'),
                                name="") +
             scale_linetype_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
@@ -634,7 +634,7 @@ function(input, output, session) {
         g <- ggplotGrob(p)
         l <- g$grobs[[which(g$layout$name == "guide-box")]]
         l <- make_legend_key_twocolor(l, 3, 2, 'cornflowerblue', 'darkgoldenrod1')
-        l <- make_legend_key_twocolor(l, 4, 2, 'darkgoldenrod1', 'darkolivegreen3')
+        l <- make_legend_key_twocolor(l, 4, 2, 'darkgoldenrod1', 'darkolivegreen4')
         g$grobs[[which(g$layout$name == "guide-box")]] <- l
 
         # Plot modified grob
