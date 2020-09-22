@@ -626,7 +626,11 @@ function(input, output, session) {
             return()
 
         # Simulate stochastic SAN model
-        rank_size.model <- rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0])
+        rank_size.model <- if (input$stochastic_lsd_incpuremodel) {
+            rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0])
+        } else {
+            NULL
+        }
         
         # Fetch experimental data
         rank_size.experiment <- rank_size(LT47[day==input$day_lsd])
@@ -665,7 +669,7 @@ function(input, output, session) {
         }
         if (nrow(rank_size.experiment) > 0)
             plot_rank_size(rank_size.experiment, col="data", size=LWD)
-        if (nrow(rank_size.model) > 0)
+        if (input$stochastic_lsd_incpuremodel && (nrow(rank_size.model) > 0))
             plot_rank_size(rank_size.model, col="model", size=LWD2)
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
             rank_size.model_pcr <- rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
@@ -681,9 +685,11 @@ function(input, output, session) {
             return()
 
         # Simulate stochastic SAN model
-        log_lsize.model <- san_stochastic_results()[
-            (t==input$day_lsd) & (C > 0),
-            list(sid=-1, log_lsize=log10(C))]
+        log_lsize.model <- if (input$stochastic_lsd_incpuremodel) {
+            san_stochastic_results()[
+                (t==input$day_lsd) & (C > 0),
+                list(sid=-1, log_lsize=log10(C))]
+        } else NULL
 
         # Fetch experimental data
         log_lsize.experiment <- LT47[
@@ -702,7 +708,7 @@ function(input, output, session) {
                                    geom="line", size=LWD)
             NULL
         }, by="sid"]
-        if (!is.null(log_lsize.model))
+        if (input$stochastic_lsd_incpuremodel && !is.null(log_lsize.model))
             p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize, col='model'),
                                   geom="line", size=LWD2)
         if (!is.null(log_lsize.model_pcr))

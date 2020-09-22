@@ -36,7 +36,7 @@ fluidPage(
                                  plotOutput("deterministic_celltypes", height="500px"))),
                  fluidRow(column(width=6,
                                  checkboxInput("deterministic_cellcounts_incsim", width="100%",
-                                               label = "show simulated cell counts in additional to theoretical counts", value=FALSE)))
+                                               label = "also show simulated cell counts", value=FALSE)))
         ),
         tabPanel("Lineage Size Distribution",
                  fluidRow(column(width=6,
@@ -45,6 +45,10 @@ fluidPage(
                           column(width=6,
                                  tags$label(class="control-label", "Number of lineages, model vs. data"),
                                  withSpinner(plotOutput("stochastic_nlineages", width="100%")))),
+                 fluidRow(column(width=6,
+                                 checkboxInput("stochastic_lsd_incpuremodel", label="also show model without PCR+Sequencing", value=TRUE)),
+                          column(width=6,
+                                 checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE))),
                  fluidRow(
                           column(width=3,
                                  selectInput("day_lsd", label = "Day to show",
@@ -55,8 +59,7 @@ fluidPage(
                                              selected="log-rank vs. log-lineagesize",
                                              choices=c("log-rank vs. log-lineagesize",
                                                        "density of log-lineagesize"))),
-                          column(width=6,
-                                 checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE))),
+                          column(width=6)),
                  fluidRow(column(width=12,
                                  bs_button("Show/hide simulation settings") %>%
                                      bs_attach_collapse("simulation_settings"))),
