@@ -108,7 +108,12 @@ are.rates.identical <- function(r1, r2) {
 # Server logic
 function(input, output, session) {
     # The rates table set programmatically
+    # It seems that even though output$rates consumes output_rates(), updating
+    # output_rates doesn't always trigger an update of the on-screen table. We
+    # thus have a separate trigger which we simply increment whenever output_rates
+    # is updated, and which is consumed by output$rates as well.
     output_rates <- reactiveVal(RATES.EMPTY)
+    output_rates_trigger <- reactiveVal(0)
     
     # The current rates table, includes updates performed via the UI
     input_rates <- reactiveVal(RATES.EMPTY)
@@ -118,10 +123,12 @@ function(input, output, session) {
                 input_rates(v)
         }
         output.updated <- FALSE
-        output.update.maybe.once <- function(v) {
-            if (!alwaysUpdateOutputAsWell || output.updated)
+        output.update.maybe.once <- function(v, override=alwaysUpdateOutputAsWell) {
+            if (!override || output.updated)
                 return()
+            message("Updating rates table programatically")
             output_rates(v)
+            output_rates_trigger(output_rates_trigger() + 1)
             output.updated <<- TRUE
         }
         if (nrow(value) == 0) {
@@ -138,8 +145,7 @@ function(input, output, session) {
             # If all rows specify Tmax but they are out of order, reorder them
             # We always update the output in this case, otherwise users would have to reorder manually
             value <- value[order(Tmax)]
-            output_rates(value)
-            output.updated <<- TRUE
+            output.update.maybe.once(value, override=TRUE)
         }
         # Update the output before filling in missing values
         output.update.maybe.once(value)
@@ -466,6 +472,10 @@ function(input, output, session) {
     
     # Rate table
     output$rates <- renderRHandsontable({
+        message("Rendering rates table")
+        # Consume trigger, this allows forcing an update by incrementing output_rates_trigger.
+        output_rates_trigger()
+        # Construct nice header names
         headers <- colnames(output_rates())
         events <- list(Tmax="", r_S="S &#8594; S S", r_0="S &#8594; &empty;", r_R="S &#8594; N",
                        r_A="S &#8594; A", r_N="A &#8594; A N", r_D="A &#8594; N")[headers]
@@ -477,8 +487,8 @@ function(input, output, session) {
                                         ")</span>"),
                                  ""),
                           "<br/>", headers)
+        # Output table
         rhandsontable(output_rates(), useTypes=TRUE, search=FALSE, colHeaders=headers)
-        # %>% hot_validate_numeric(cols=colnames(output_rates()), min=0, max=Inf)
     })
 
     # Deterministic model dynamics
