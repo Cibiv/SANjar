@@ -604,8 +604,7 @@ function(input, output, session) {
         helpText(HTML(phantom_threshold_auto_message()))
     })
     
-    # Lineage size distribution
-    output$stochastic_lsd <- renderPlot({
+    plot_stochastic_lsd_logrank_loglineagesize <- reactive({
         message("Updating rank-abundance plot of the lineage size distribution ")
         if (is.null(san_stochastic_results()))
             return()
@@ -659,7 +658,56 @@ function(input, output, session) {
         
         p
     })
+
+    plot_stochastic_lsd_density_loglineagesize <- reactive({
+        message("Updating density plot of the logarithmic lineage size distribution ")
+        if (is.null(san_stochastic_results()))
+            return()
+
+        # Simulate stochastic SAN model
+        log_lsize.model <- san_stochastic_results()[
+            (t==input$day_lsd) & (C > 0),
+            list(sid=-1, log_lsize=log10(C))]
+
+        # Fetch experimental data
+        log_lsize.experiment <- LT47[
+            day==input$day_lsd,
+            list(sid, log_lsize=log10(lsize))]
+
+        log_lsize.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            san_stochastic_results_with_pcr_filtered()[
+                (t==input$day_lsd) & (R > 0),
+                list(sid=-1, log_lsize=log10(R))]
+        } else NULL
+
+        p <- ggplot()
+        log_lsize.experiment[, {
+            p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize, col='data'),
+                                   geom="line", size=LWD)
+            NULL
+        }, by="sid"]
+        if (!is.null(log_lsize.model))
+            p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize, col='model'),
+                                  geom="line", size=LWD2)
+        if (!is.null(log_lsize.model_pcr))
+            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize, col='model+seq.'),
+                                   geom="line", size=LWD2)
+
+        p + xlab("lineage size [norm. reads]") +
+            ylab("density") +
+            scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
+                               values=c('maroon', 'black', 'gold3'),
+                               name=NULL)
+    })
     
+    # Lineage size distribution
+    output$stochastic_lsd <- renderPlot({
+        switch(input$stochastic_lsd_plottype,
+               `log-rank vs. log-lineagesize`=plot_stochastic_lsd_logrank_loglineagesize(),
+               `density of log-lineagesize`=plot_stochastic_lsd_density_loglineagesize(),
+               stop("unknown plot type ", input$stochastic_lsd_plottype))
+    })
+
     output$stochastic_nlineages <- renderPlot({
         message("Updating number-of-lineages plot ")
         if (is.null(san_stochastic_results()))
