@@ -493,7 +493,7 @@ function(input, output, session) {
 
     # Deterministic model dynamics
     output$deterministic_cellcounts <- renderPlot({
-        message("Updating deterministic cell counts plot")
+        message("Rendering deterministic cell counts plot")
         if (is.null(san_deterministic_results()))
             return()
         
@@ -553,7 +553,7 @@ function(input, output, session) {
     })
 
     output$deterministic_celltypes <- renderPlot({
-        message("Updating deterministic cell types plot ")
+        message("Rendering deterministic cell types plot ")
         if (is.null(san_deterministic_results()))
             return()
         
@@ -631,7 +631,7 @@ function(input, output, session) {
     })
     
     plot_stochastic_lsd_logrank_loglineagesize <- reactive({
-        message("Updating rank-abundance plot of the lineage size distribution ")
+        message("Rendering rank-abundance plot of the lineage size distribution ")
         if (is.null(san_stochastic_results()))
             return()
 
@@ -690,7 +690,7 @@ function(input, output, session) {
     })
 
     plot_stochastic_lsd_density_loglineagesize <- reactive({
-        message("Updating density plot of the logarithmic lineage size distribution ")
+        message("Rendering density plot of the logarithmic lineage size distribution ")
         if (is.null(san_stochastic_results()))
             return()
 
@@ -741,7 +741,7 @@ function(input, output, session) {
     })
 
     output$stochastic_nlineages <- renderPlot({
-        message("Updating number-of-lineages plot ")
+        message("Rendering number-of-lineages plot ")
         if (is.null(san_stochastic_results()))
             return()
         
