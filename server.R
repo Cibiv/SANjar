@@ -76,6 +76,23 @@ my_scale_log10 <- function(scale, ...) scale(
     ...
 )
 
+# Hake for deterministic_celltypes to show the correct legend
+make_legend_key_twocolor <- function(legend, row, column, color1, color2) {
+    idx <- grep(paste0("key-", row, "-", column*5 - 3), legend$grobs[[1]]$layout$name)
+    for(i in 2:(length(idx)-2)) {
+        # Dunno why there are so many overlapping grobs that all draw the same line
+        # here, but to avoid visual artifacts we set all their widths to zero.
+        legend$grobs[[1]]$grobs[[idx[i]]]$gp$lwd <- 0
+    }
+    # Make second to last grob a solid line of color2
+    legend$grobs[[1]]$grobs[[idx[length(idx)-1]]]$gp$col <- color2
+    legend$grobs[[1]]$grobs[[idx[length(idx)-1]]]$gp$lty <- 'solid'
+    # Make last grob a dashed line of color1
+    legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$col <- color1
+    legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$lty <- 'dashed'
+    legend
+}
+
 # Transform LT47 to rank-size form
 rank_size <- function(subset) {
     subset[, {
@@ -572,7 +589,7 @@ function(input, output, session) {
 
         # Plot results
         #            my_scale_log10(scale_y_log10, limits=c(0.1, 100), oob=oob_keep) +
-        ggplot(data=as.data.table(r)) +
+        p <- ggplot(data=as.data.table(r)) +
             stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4', linetype='exp.CXRC4'), fun=mean, geom="line", size=LWD) +
             stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM', linetype='exp.NCAM'), fun=mean, geom="line", size=LWD) +
@@ -609,9 +626,19 @@ function(input, output, session) {
                                                                  'solid', 'solid', 'solid',
                                                                  'solid', 'solid'),
                                                       size=c(LWD, LWD, LWD,
-                                                             LWD2, LWD2, LWD2,
-                                                             LWD2, LWD2)),
+                                                             LWD, LWD, LWD,
+                                                             LWD, LWD)),
                                     ncol=2, byrow=FALSE))
+
+        # Patch legend by rendering the plot as a grob and patching the legens in there
+        g <- ggplotGrob(p)
+        l <- g$grobs[[which(g$layout$name == "guide-box")]]
+        l <- make_legend_key_twocolor(l, 3, 2, 'cornflowerblue', 'darkgoldenrod1')
+        l <- make_legend_key_twocolor(l, 4, 2, 'darkgoldenrod1', 'darkolivegreen3')
+        g$grobs[[which(g$layout$name == "guide-box")]] <- l
+
+        # Plot modified grob
+        plot(g)
     })
     
     # Message about simulation accuracy
