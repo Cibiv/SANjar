@@ -32,7 +32,7 @@ fluidPage(
                                  tags$label(class="control-label", "Cell counts, model vs. data"),
                                  plotOutput("deterministic_cellcounts", height="500px")),
                           column(width=6,
-                                 tags$label(class="control-label", "Cell type composition, model vs. data"),
+                                 tags$label(class="control-label", "Organoid composition, model vs. data"),
                                  plotOutput("deterministic_celltypes", height="500px"))),
                  fluidRow(column(width=6,
                                  checkboxInput("deterministic_cellcounts_incsim", width="100%",

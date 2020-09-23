@@ -82,7 +82,7 @@ my_scale_log10_pretransformed <- function(scale, ...) scale(
 )
 
 # Hake for deterministic_celltypes to show the correct legend
-make_legend_key_twocolor <- function(legend, row, column, color1, color2) {
+make_legend_key_twocolor <- function(legend, row, column, color1, color2, pattern="dashed") {
     idx <- grep(paste0("key-", row, "-", column*5 - 3), legend$grobs[[1]]$layout$name)
     for(i in 2:(length(idx)-2)) {
         # Dunno why there are so many overlapping grobs that all draw the same line
@@ -94,7 +94,7 @@ make_legend_key_twocolor <- function(legend, row, column, color1, color2) {
     legend$grobs[[1]]$grobs[[idx[length(idx)-1]]]$gp$lty <- 'solid'
     # Make last grob a dashed line of color1
     legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$col <- color1
-    legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$lty <- 'dashed'
+    legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$lty <- pattern
     legend
 }
 
@@ -575,7 +575,7 @@ function(input, output, session) {
     })
 
     output$deterministic_celltypes <- renderPlot({
-        message("Rendering deterministic cell types plot ")
+        message("Rendering deterministic organoid composition plot ")
         if (is.null(san_deterministic_results()))
             return()
         
@@ -623,7 +623,7 @@ function(input, output, session) {
                                            'mod.S+A', 'mod.A+N'),
                                  values=c('dashed', 'dashed', 'dashed',
                                           'solid', 'solid', 'solid',
-                                          'dashed', 'dashed'),
+                                          'FF', 'FF'),
                                  guide=NULL) +
             xlab("time [days]") +
             ylab("fraction of organoid [%]") +
@@ -638,8 +638,8 @@ function(input, output, session) {
         # Patch legend by rendering the plot as a grob and patching the legens in there
         g <- ggplotGrob(p)
         l <- g$grobs[[which(g$layout$name == "guide-box")]]
-        l <- make_legend_key_twocolor(l, 3, 2, 'cornflowerblue', 'darkgoldenrod1')
-        l <- make_legend_key_twocolor(l, 4, 2, 'darkgoldenrod1', 'darkolivegreen4')
+        l <- make_legend_key_twocolor(l, 3, 2, 'cornflowerblue', 'darkgoldenrod1', pattern="FF")
+        l <- make_legend_key_twocolor(l, 4, 2, 'darkgoldenrod1', 'darkolivegreen4', pattern="FF")
         g$grobs[[which(g$layout$name == "guide-box")]] <- l
 
         # Plot modified grob
