@@ -816,7 +816,7 @@ function(input, output, session) {
         p <- ggplot() +
             stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
             stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD2)
+            geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD)
         if (input$stochastic_nlineages_logy)
             p <- p + my_scale_log10(scale_y_log10)
 
