@@ -76,6 +76,11 @@ my_scale_log10 <- function(scale, ...) scale(
     ...
 )
 
+my_scale_log10_pretransformed <- function(scale, ...) scale(
+    labels = scales::math_format(10^.x),
+    ...
+)
+
 # Hake for deterministic_celltypes to show the correct legend
 make_legend_key_twocolor <- function(legend, row, column, color1, color2) {
     idx <- grep(paste0("key-", row, "-", column*5 - 3), legend$grobs[[1]]$layout$name)
@@ -680,6 +685,11 @@ function(input, output, session) {
         ymin <- 10^(  floor(log10(curves.ymin)))
         ymax <- 10^(ceiling(log10(curves.ymax)))
 
+        # Legend overrides
+        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
+                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
+        groups <- list()
+
         # Setup plot
         p <- ggplot() +
             my_scale_log10(scale_x_log10, limits=c(1, xmax)) +
@@ -688,9 +698,8 @@ function(input, output, session) {
             ylab("lineage size [norm. reads]") +
             annotation_logticks() +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
-                               values=c('maroon', 'black', 'gold3'),
-                               name=NULL) +
-            guides(col=guide_legend(ncol=3,byrow=TRUE))
+                               values=c('maroon', 'violet', 'black'),
+                               name=NULL)
         
         # Draw rank-size curves for the experimental lineage sizes in all replicates
         plot_rank_size <- function(rank_size, col, ...) {
@@ -704,16 +713,22 @@ function(input, output, session) {
                 NULL
             }, by="sid"]
         }
-        if (nrow(rank_size.experiment) > 0)
-            plot_rank_size(rank_size.experiment, col="data", size=LWD)
-        if (input$stochastic_lsd_incpuremodel && (nrow(rank_size.model) > 0))
-            plot_rank_size(rank_size.model, col="model", size=LWD2)
+        if (nrow(rank_size.experiment) > 0) {
+            groups[length(groups)+1] <- "data"
+            plot_rank_size(rank_size.experiment, col="data", size=LWD, linetype="dashed")
+        }
+        if (input$stochastic_lsd_incpuremodel && (nrow(rank_size.model) > 0)) {
+            groups[length(groups)+1] <- "model"
+            plot_rank_size(rank_size.model, col="model", size=LWD)
+        }
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            groups[length(groups)+1] <- "model+seq."
             rank_size.model_pcr <- rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
             plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
         }
         
-        p
+        p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
+                                    ncol=3, byrow=TRUE))
     })
 
     plot_stochastic_lsd_density_loglineagesize <- reactive({
@@ -739,24 +754,46 @@ function(input, output, session) {
                 list(sid=-1, log_lsize=log10(R))]
         } else NULL
 
-        p <- ggplot()
-        log_lsize.experiment[, {
-            p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize, col='data'),
-                                   geom="line", size=LWD)
-            NULL
-        }, by="sid"]
-        if (input$stochastic_lsd_incpuremodel && !is.null(log_lsize.model))
-            p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize, col='model'),
-                                  geom="line", size=LWD2)
-        if (!is.null(log_lsize.model_pcr))
-            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize, col='model+seq.'),
-                                   geom="line", size=LWD2)
+        # Legend overrides
+        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
+                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
+        groups <- list()
 
-        p + xlab("lineage size [norm. reads]") +
+        # Setup plot
+        p <- ggplot() +
+            my_scale_log10_pretransformed(scale_x_continuous) +
+            xlab("lineage size [norm. reads]") +
             ylab("density") +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
-                               values=c('maroon', 'black', 'gold3'),
+                               values=c('maroon', 'violet', 'black'),
                                name=NULL)
+
+        # Draw densities
+        if (nrow(log_lsize.experiment) > 0) {
+            groups[length(groups)+1] <- "data"
+            log_lsize.experiment[, {
+                p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize, col='data'),
+                                       geom="line", size=LWD, linetype="dashed")
+                NULL
+            }, by="sid"]
+        }
+        if (input$stochastic_lsd_incpuremodel && !is.null(log_lsize.model)) {
+            groups[length(groups)+1] <- "model"
+            p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize, col='model'),
+                                  geom="line", size=LWD)
+        }
+        if (!is.null(log_lsize.model_pcr)) {
+            print("adding model+seq.")
+            groups[length(groups)+1] <- "model+seq."
+            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize, col='model+seq.'),
+                                  geom="line", size=LWD2)
+        }
+
+        # Finish plot
+        print(groups)
+        print(lapply(legend.override, function(o) { o[unlist(groups)] }))
+        p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
+                                    ncol=3, byrow=TRUE))
     })
     
     # Lineage size distribution
@@ -775,27 +812,33 @@ function(input, output, session) {
         lsd <- san_stochastic_results()[, list(nlineages=sum(C > 0)), by="t"]
         lsd_scells <- san_stochastic_results()[, list(nlineages=sum(S > 0)), by="t"]
         
-        # Plot results
+        # Setup plot
         p <- ggplot() +
-            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun=mean, geom="point", size=LWD) +
+            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
             stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD2)
-            if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-                lsd_pcr <- san_stochastic_results_with_pcr_filtered()[, list(nlineages=.N), by="t"]
-                p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'), size=LWD2)
-            }
+        if (input$stochastic_nlineages_logy)
+            p <- p + my_scale_log10(scale_y_log10)
+
+        # Draw lines
+        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            lsd_pcr <- san_stochastic_results_with_pcr_filtered()[, list(nlineages=.N), by="t"]
+            p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'), size=LWD2)
+        }
         p <- p +
             geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='mod.S'), size=LWD) +
             scale_color_manual(breaks=c('exp.obs', 'mod.obs', 'mod.all', 'mod.S'),
                                labels=c('obs. (data)', 'obs. (model+seq.)',
                                         'total (model)', 'w/ S-cells (model)'),
-                               values=c('maroon', 'gold3', 'black', 'cornflowerblue'),
+                               values=c('maroon', 'black', 'violet', 'cornflowerblue'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages") +
-            guides(col=guide_legend(ncol=2, byrow=FALSE))
-        if (input$stochastic_nlineages_logy)
-            p <- p + my_scale_log10(scale_y_log10)
+            guides(col=guide_legend(override.aes=list(linetype=c("dashed", "solid", "solid", "solid"),
+                                                      size=c(LWD, LWD2, LWD, LWD)),
+                                    ncol=2, byrow=FALSE))
+
+        # Finish plot
         p
     })
 }
