@@ -686,7 +686,8 @@ function(input, output, session) {
     output$phantom_threshold_auto_message <- renderUI({
         helpText(HTML(phantom_threshold_auto_message()))
     })
-    
+
+    # Lineage size distribution
     plot_stochastic_lsd_logrank_loglineagesize <- reactive({
         message("Rendering rank-abundance plot of the lineage size distribution ")
         if (is.null(san_stochastic_results()))
@@ -821,7 +822,6 @@ function(input, output, session) {
                                     ncol=3, byrow=TRUE))
     })
     
-    # Lineage size distribution
     output$stochastic_lsd <- renderPlot({
         switch(input$stochastic_lsd_plottype,
                `log-rank vs. log-lineagesize`=plot_stochastic_lsd_logrank_loglineagesize(),
@@ -829,6 +829,7 @@ function(input, output, session) {
                stop("unknown plot type ", input$stochastic_lsd_plottype))
     })
 
+    # Number of surviving lineages
     output$stochastic_nlineages <- renderPlot({
         message("Rendering number-of-lineages plot ")
         if (is.null(san_stochastic_results()))
