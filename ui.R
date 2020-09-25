@@ -82,6 +82,18 @@ fluidPage(
                                              htmlOutput("phantom_threshold_auto_message")))
                  )
         ),
+        tabPanel("S-cell extinction dynamics",
+                 fluidRow(column(width=6,
+                                 tags$label(class="control-label", "Lineage size on day 40 vs. S-cell extinction time"),
+                                 withSpinner(plotOutput("stochastic_scellext_vs_lineagesize", width="100%", height="250px"), hide.ui=FALSE),
+                                 tags$label(class="control-label", "Fraction of lineages with extant S-cell population"),
+                                 withSpinner(plotOutput("stochastic_scellext_vs_time", width="100%", height="250px"), hide.ui=FALSE)),
+                          column(width=6,
+                                 tags$label(class="control-label",  htmlOutput("stochastic_scellext_trajectory_label")),
+                                 withSpinner(plotOutput("stochastic_scellext_trajectory", width="100%"), hide.ui=FALSE),
+                                 sliderInput("day_scellext", "S-cell extinction time", width="100%",
+                                             min=0, max=0, step=1, value=0)))
+        ),
         tabPanel("Parameter Sets",
                  fluidRow(column(width=6,
                                  selectInput("loadfrom", label="Use parameter set", width="100%",

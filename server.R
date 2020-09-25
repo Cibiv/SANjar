@@ -200,6 +200,7 @@ function(input, output, session) {
 
     # Update the possible times for which the LT47 is plotted if Tfinal changes
     observeEvent(Tfinal(), {
+        # Update day_lsd
         sel <- input$day_lsd
         choices <- sort(unique(c(LT47$day, Tfinal())))
         if ((length(sel) < 1) || is.na(sel) || (sel == ""))
@@ -207,6 +208,9 @@ function(input, output, session) {
         if (!(sel %in% choices))
             sel <- choices[length(choices)]
         updateSelectInput(session, "day_lsd", choices=choices, selected=sel)
+
+        # Update day_scellext
+        updateSliderInput(session, "day_scellext", min=0, max=Tfinal()+1, value=Tfinal()+1)
     })
     
     san_deterministic_results <- reactive({
@@ -232,6 +236,27 @@ function(input, output, session) {
         } else NULL
     })
     
+    san_stochastic_extinction_trajectories <- reactive({
+        # Do nothing if the rates table is empty or s0 is zero
+        if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
+            L=1e5
+            message("Simulating ", L, " lineages under the SAN model to obtain average extinction trajectories")
+            r <- san_stochastic(L=L, rates=input_rates(), samples_per_day=1,
+                                p_cutoff=as.numeric(input$p_cutoff))
+            r[, C := S + A + N]
+            r[, Text.S := {
+                t.is.ext.S <- t[S == 0]
+                if (length(t.is.ext.S) > 0) min(t.is.ext.S) else Inf
+            }, by="lid"][, list(
+                C=mean(C), C.sd=sd(C),
+                S=mean(S), S.sd=sd(S),
+                A=mean(A), A.sd=sd(A),
+                N=mean(N), N.sd=sd(N),
+                nlineages=.N
+            ), keyby=c("t", "Text.S")]
+        } else NULL
+    })
+
     p_cutoff_message <- reactive({
         # Compute expected values for S, A, N using the deterministic model
         mod.exp <- san_deterministic(s0=input$s0, rates=input_rates())
@@ -840,5 +865,75 @@ function(input, output, session) {
 
         # Finish plot
         p
+    })
+
+    # S-cell extinction dynamics
+    output$stochastic_scellext_vs_lineagesize <- renderPlot({
+        ymax <- san_stochastic_extinction_trajectories()[, 10^ceiling(log10(max(C)))]
+
+                t.max <- san_stochastic_extinction_trajectories()[, max(t)]
+        ggplot(data=san_stochastic_extinction_trajectories()[t==t.max],
+               aes(x=ifelse(is.finite(Text.S), Text.S, max(t)+1), y=pmax(C, 0.1), ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1))) +
+            geom_ribbon(alpha=0.15) +
+            geom_line(size=LWD2) +
+            lims(x=c(0, Tfinal()+1)) +
+            my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
+            xlab("S-cell extinction time [days]") +
+            ylab(paste0("lineage size [cells]"))
+    })
+
+    output$stochastic_scellext_vs_time <- renderPlot({
+        ext_traj <- san_stochastic_extinction_trajectories()
+        data <- rbind(ext_traj[, list(survived=sum(nlineages[Text.S > t]) / sum(nlineages)), by="t"],
+                      data.table(t=Tfinal()+1, survived=ext_traj[t==Tfinal(), sum(nlineages[is.infinite(Text.S)]) / sum(nlineages)]))
+        ymin <- data[, min(survived)]
+        ggplot(data=data, aes(x=t, y=100*survived)) +
+            geom_line(col='cornflowerblue') +
+            lims(x=c(0, Tfinal()+1)) +
+            scale_y_log10(limits=c(100*ymin, 100), oob=oob_keep) +
+            xlab("time [days]") +
+            ylab("lineages [%]")
+    })
+
+    stochastic_scellext_trajectory_label <- reactiveVal()
+    output$stochastic_scellext_trajectory_label <- renderUI({
+        HTML(stochastic_scellext_trajectory_label())
+    })
+    output$stochastic_scellext_trajectory <- renderPlot({
+        ymax <- san_stochastic_extinction_trajectories()[, 10^ceiling(log10(max(C)))]
+
+        # Plot results
+        if (input$day_scellext <= Tfinal()) {
+            data <- san_stochastic_extinction_trajectories()[Text.S == input$day_scellext]
+            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction on day ", input$day_scellext))
+            if (nrow(data) < 1)
+                stop("simulation produced no lineages with S-cell extinction on day ", input$day_scellext)
+        } else {
+            data <- san_stochastic_extinction_trajectories()[is.infinite(Text.S)]
+            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction <b>after</b> day ", Tfinal()))
+            if (nrow(data) < 1)
+                stop("simulation produced no lineages with S-cells surving past day ", Tfinal())
+        }
+
+        ggplot(data=data, aes(x=t)) +
+            geom_ribbon(aes(ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1), fill='mod.C'), alpha=0.2) +
+            geom_ribbon(aes(ymin=pmax(S-S.sd, 0.1), ymax=pmax(S+S.sd, 0.1), fill='mod.S'), alpha=0.15) +
+            geom_ribbon(aes(ymin=pmax(A-A.sd, 0.1), ymax=pmax(A+A.sd, 0.1), fill='mod.A'), alpha=0.15) +
+            geom_ribbon(aes(ymin=pmax(N-N.sd, 0.1), ymax=pmax(N+N.sd, 0.1), fill='mod.N'), alpha=0.15) +
+            geom_line(aes(y=pmax(C, 0.1), col='mod.C'), size=LWD2) +
+            geom_line(aes(y=pmax(S, 0.1), col='mod.S'), size=LWD) +
+            geom_line(aes(y=pmax(A, 0.1), col='mod.A'), size=LWD) +
+            geom_line(aes(y=pmax(N, 0.1), col='mod.N'), size=LWD) +
+            my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
+            scale_color_manual(breaks=c('mod.C', 'mod.S', 'mod.A', 'mod.N'),
+                               labels=c('total (model)', 'S (model)', 'A (model)', 'N (model)'),
+                               values=c('black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4'),
+                               name=NULL) +
+            xlab("time [days]") +
+            ylab("cells per lineage") +
+            guides(col=guide_legend(override.aes=list(linetype=c('solid', 'solid', 'solid', 'solid'),
+                                                      size=c(LWD2, LWD, LWD, LWD)),
+                                    ncol=2, byrow=FALSE),
+                   fill=guide_none())
     })
 }
