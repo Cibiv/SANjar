@@ -92,7 +92,15 @@ fluidPage(
                                  tags$label(class="control-label",  htmlOutput("stochastic_scellext_trajectory_label")),
                                  withSpinner(plotOutput("stochastic_scellext_trajectory", width="100%"), hide.ui=FALSE),
                                  sliderInput("day_scellext", "S-cell extinction time", width="100%",
-                                             min=0, max=0, step=1, value=0)))
+                                             min=0, max=0, step=1, value=0))),
+                 fluidRow(column(width=12,
+                                 bs_button("Show/hide simulation settings") %>%
+                                     bs_attach_collapse("scellext_simulation_settings"))),
+                 bs_collapse("scellext_simulation_settings",
+                             fluidRow(column(width=3,
+                                             selectInput("scellext_nlineages", "Number of lineages to simulate", width="100%",
+                                                         choices=c("1e4", "1e5", "1e6", "1e7"), selected="1e5")))
+                 )
         ),
         tabPanel("Parameter Sets",
                  fluidRow(column(width=6,

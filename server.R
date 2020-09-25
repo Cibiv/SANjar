@@ -239,7 +239,7 @@ function(input, output, session) {
     san_stochastic_extinction_trajectories <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
-            L=1e5
+            L=as.integer(input$scellext_nlineages)
             message("Simulating ", L, " lineages under the SAN model to obtain average extinction trajectories")
             r <- san_stochastic(L=L, rates=input_rates(), samples_per_day=1,
                                 p_cutoff=as.numeric(input$p_cutoff))
