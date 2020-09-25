@@ -809,15 +809,12 @@ function(input, output, session) {
                                   geom="line", size=LWD)
         }
         if (!is.null(log_lsize.model_pcr)) {
-            print("adding model+seq.")
             groups[length(groups)+1] <- "model+seq."
             p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize, col='model+seq.'),
                                   geom="line", size=LWD2)
         }
 
         # Finish plot
-        print(groups)
-        print(lapply(legend.override, function(o) { o[unlist(groups)] }))
         p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
                                     ncol=3, byrow=TRUE))
     })
