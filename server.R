@@ -98,11 +98,29 @@ make_legend_key_twocolor <- function(legend, row, column, color1, color2, patter
     legend
 }
 
-# Transform LT47 to rank-size form
+#' Compute rank-size table from a table with observed lineage sizes
+#'
+#' @param subset a `data.table` containing columns `sid` (sample id) and `lsize` (lineage size)
+#' @return a `data.table`  with columns `sid` (sample id), `rank` (lineage size rank) and `size` (lineage size)
 rank_size <- function(subset) {
     subset[, {
         .SD[order(lsize, decreasing=TRUE)][, list(rank=1:.N, size=lsize)]
     }, by="sid"]
+}
+
+#' Align rank-size curves
+align_rank_size <- function(ranked) {
+    rank.max.all <- max(ranked$rank)
+    size.min.all <- min(ranked$size)
+    ranked[, {
+        rank.scale <- rank.max.all / (max(rank)-1)
+        size.scale <- size.min.all / min(size)
+        sm <- min(size)
+        list(rank, size,
+             rank.aligned=(rank-1) * rank.scale + 1,
+             size.aligned=size * size.scale,
+             rank.scale, size.scale)
+    }, keyby="sid"]
 }
 
 # Return true if x and y have the same value, including both being NA
@@ -696,17 +714,21 @@ function(input, output, session) {
         # Simulate stochastic SAN model
         rank_size.model <- if (input$stochastic_lsd_incpuremodel) {
             rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0])
-        } else {
-            NULL
-        }
+        } else data.table()
+
+        # Simulate PCR+Sequencing
+        rank_size.model_pcr <- if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
+        } else data.table()
+
         
         # Fetch experimental data
-        rank_size.experiment <- rank_size(LT47[day==input$day_lsd])
+        rank_size.experiment <- LT47.RANKSIZE[day==input$day_lsd]
         
         # X coordinates to use when plotting curves
-        curves.xmax <- max(rank_size.experiment$rank, rank_size.model$rank)
-        curves.ymin <- min(rank_size.experiment$size, rank_size.model$size)
-        curves.ymax <- max(rank_size.experiment$size, rank_size.model$size)
+        curves.xmax <- max(rank_size.experiment$rank, rank_size.model$rank, rank_size.model_pcr$rank)
+        curves.ymin <- min(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
+        curves.ymax <- max(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
         xmax <- 10^(ceiling(10*log10(curves.xmax))/10)
         ymin <- 10^(  floor(log10(curves.ymin)))
         ymax <- 10^(ceiling(log10(curves.ymax)))
@@ -747,9 +769,8 @@ function(input, output, session) {
             groups[length(groups)+1] <- "model"
             plot_rank_size(rank_size.model, col="model", size=LWD)
         }
-        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+        if (nrow(rank_size.model_pcr) > 0) {
             groups[length(groups)+1] <- "model+seq."
-            rank_size.model_pcr <- rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
             plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
         }
         
