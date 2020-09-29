@@ -33,7 +33,9 @@ Contains the results of the lineagetracing experiment LT47, analyzed with Benoit
 lt47.rd, 15.09.2020:
 Produced using lt47.R from lineagetracing_H9_only.tsv as of 15.09.2020
 
-lt47.processed.rd, 22.09.2020:
+lt47.processed.rd, 29.09.2020:
 Produced using lt47.processed.R from lt47.rd as of 15.09.2020. Contains some pre-computed results, and removes
-low-quality samples 15 & 16 which are included in lt47.rd
+low-quality samples 15 & 16 which are included in lt47.rd. Computes rank-size tables and powerlaw distribution
+fits using the code from organoid/data/lt47.ranksize.R as of 29.09.2020.
+
 
