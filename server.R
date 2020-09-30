@@ -6,6 +6,7 @@ library(ggplot2)
 library(scales)
 library(shiny)
 library(rhandsontable)
+source("utilities.R")
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
@@ -96,42 +97,6 @@ make_legend_key_twocolor <- function(legend, row, column, color1, color2, patter
     legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$col <- color1
     legend$grobs[[1]]$grobs[[idx[length(idx)]]]$gp$lty <- pattern
     legend
-}
-
-#' Compute rank-size table from a table with observed lineage sizes
-#'
-#' @param subset a `data.table` containing columns `sid` (sample id) and `lsize` (lineage size)
-#' @return a `data.table`  with columns `sid` (sample id), `rank` (lineage size rank) and `size` (lineage size)
-rank_size <- function(subset) {
-    subset[, {
-        .SD[order(lsize, decreasing=TRUE)][, list(rank=1:.N, size=lsize)]
-    }, by="sid"]
-}
-
-#' Align rank-size curves
-align_rank_size <- function(ranked) {
-    rank.max.all <- max(ranked$rank)
-    size.min.all <- min(ranked$size)
-    ranked[, {
-        rank.scale <- rank.max.all / (max(rank)-1)
-        size.scale <- size.min.all / min(size)
-        sm <- min(size)
-        list(rank, size,
-             rank.aligned=(rank-1) * rank.scale + 1,
-             size.aligned=size * size.scale,
-             rank.scale, size.scale)
-    }, keyby="sid"]
-}
-
-# Return true if x and y have the same value, including both being NA
-is.samevalue <- function(x, y) {
-    if (is.atomic(x) && is.atomic(y)) {
-        xv <- !is.na(x)
-        yv <- !is.na(y)
-        return(!((length(x) != length(y)) || any(xv != yv) || any(x[xv] != y[xv])))
-    }
-    else
-        stop("non-atomic values are currently unsupported")
 }
 
 # Return true if the two rates tables are identical
@@ -713,12 +678,14 @@ function(input, output, session) {
 
         # Simulate stochastic SAN model
         rank_size.model <- if (input$stochastic_lsd_incpuremodel) {
-            rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0])
+            rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0],
+                      by="sid")
         } else data.table()
 
         # Simulate PCR+Sequencing
         rank_size.model_pcr <- if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)])
+            rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)],
+                      by="sid")
         } else data.table()
 
         
@@ -855,6 +822,15 @@ function(input, output, session) {
         
         lsd <- san_stochastic_results()[, list(nlineages=sum(C > 0)), by="t"]
         lsd_scells <- san_stochastic_results()[, list(nlineages=sum(S > 0)), by="t"]
+        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            r <- san_stochastic_results_with_pcr_filtered()
+            lsd_pcr <- r[, list(nlineages=.N), by="t"]
+            limit.alpha <- r[t >= LT47.LIMIT.ALPHA.STARTDAY][, fit_pareto(R), by=c("t")][,
+                mean(alpha)
+            ]
+            lsd_powerlaw <- fit_powerlaw_model(rank_size(r[, list(t, lsize=R)], by="t"),
+                                               alpha=limit.alpha, by="t")
+        }
         
         # Setup plot
         p <- ggplot() +
@@ -866,20 +842,22 @@ function(input, output, session) {
 
         # Draw lines
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            lsd_pcr <- san_stochastic_results_with_pcr_filtered()[, list(nlineages=.N), by="t"]
             p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'), size=LWD2)
+            p <- p + geom_line(data=lsd_powerlaw, aes(x=t, y=zipf.rank.min, col='mod.nonzipf'), size=LWD)
         }
         p <- p +
+            stat_summary(data=LT47.POWERLAW, aes(x=day, y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+            stat_summary(data=LT47.POWERLAW, aes(x=day, y=zipf.rank.min, col='exp.nonzipf'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='mod.S'), size=LWD) +
-            scale_color_manual(breaks=c('exp.obs', 'mod.obs', 'mod.all', 'mod.S'),
-                               labels=c('obs. (data)', 'obs. (model+seq.)',
-                                        'total (model)', 'w/ S-cells (model)'),
-                               values=c('maroon', 'black', 'violet', 'cornflowerblue'),
+            scale_color_manual(breaks=c('exp.obs', 'exp.nonzipf', 'mod.obs', 'mod.all', 'mod.S', 'mod.nonzipf'),
+                               labels=c('obs. (data)', 'non-Zipf  (data)', 'obs. (model+seq.)',
+                                        'total (model)', 'w/ S-cells (model)', 'non-Zipf (model+seq.)'),
+                               values=c('maroon', 'slateblue3', 'black', 'violet', 'cornflowerblue', 'slateblue3'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages") +
-            guides(col=guide_legend(override.aes=list(linetype=c("dashed", "solid", "solid", "solid"),
-                                                      size=c(LWD, LWD2, LWD, LWD)),
+            guides(col=guide_legend(override.aes=list(linetype=c("dashed", "dashed", "solid", "solid", "solid", "solid"),
+                                                      size=c(LWD, LWD, LWD2, LWD, LWD, LWD)),
                                     ncol=2, byrow=FALSE))
 
         # Finish plot
