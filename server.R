@@ -546,6 +546,7 @@ function(input, output, session) {
             geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
             geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.ana'), size=LWD) +
             my_scale_log10(scale_y_log10, limits=c(1e2, 1e7), oob=oob_keep) +
+            annotation_logticks(sides="l") +
             scale_color_manual(breaks=c('exp.C', 'mod.C', 'mod.S', 'mod.A', 'mod.N'),
                                labels=c('total (data)', 'total (model)',
                                         'S (model)', 'A (model)', 'N (model)'),
@@ -601,7 +602,6 @@ function(input, output, session) {
         CT.TRA160 <- CELLTYPES[antibody=="TRA1-60"]
 
         # Plot results
-        #            my_scale_log10(scale_y_log10, limits=c(0.1, 100), oob=oob_keep) +
         p <- ggplot(data=as.data.table(r)) +
             stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4', linetype='exp.CXRC4'), fun=mean, geom="line", size=LWD) +
             stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
@@ -708,10 +708,10 @@ function(input, output, session) {
         # Setup plot
         p <- ggplot() +
             my_scale_log10(scale_x_log10, limits=c(1, xmax)) +
-            xlab("rank") +
             my_scale_log10(scale_y_log10, limits=c(ymin, ymax)) +
+            annotation_logticks(sides="bl") +
+            xlab("rank") +
             ylab("lineage size [norm. reads]") +
-            annotation_logticks() +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
@@ -776,6 +776,7 @@ function(input, output, session) {
         # Setup plot
         p <- ggplot() +
             my_scale_log10_pretransformed(scale_x_continuous) +
+            annotation_logticks(sides="b") +
             xlab("lineage size [norm. reads]") +
             ylab("density") +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
@@ -838,12 +839,14 @@ function(input, output, session) {
             stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD)
         if (input$stochastic_nlineages_logy)
-            p <- p + my_scale_log10(scale_y_log10)
+            p <- p +
+                my_scale_log10(scale_y_log10) +
+                annotation_logticks(sides="l")
 
         # Draw lines
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
             p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'), size=LWD2)
-            p <- p + geom_line(data=lsd_powerlaw, aes(x=t, y=zipf.rank.min, col='mod.nonzipf'), size=LWD)
+            p <- p + geom_line(data=lsd_powerlaw, aes(x=t, y=zipf.rank.min, col='mod.nonzipf'), size=LWD2)
         }
         p <- p +
             stat_summary(data=LT47.POWERLAW, aes(x=day, y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
@@ -851,13 +854,13 @@ function(input, output, session) {
             geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='mod.S'), size=LWD) +
             scale_color_manual(breaks=c('exp.obs', 'exp.nonzipf', 'mod.obs', 'mod.all', 'mod.S', 'mod.nonzipf'),
                                labels=c('obs. (data)', 'non-Zipf  (data)', 'obs. (model+seq.)',
-                                        'total (model)', 'w/ S-cells (model)', 'non-Zipf (model+seq.)'),
-                               values=c('maroon', 'slateblue3', 'black', 'violet', 'cornflowerblue', 'slateblue3'),
+                                        'total (model)', 'extant S-cells (model)', 'non-Zipf (model+seq.)'),
+                               values=c('maroon', 'slateblue3', 'black', 'violet', 'cornflowerblue', 'darkcyan'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages") +
             guides(col=guide_legend(override.aes=list(linetype=c("dashed", "dashed", "solid", "solid", "solid", "solid"),
-                                                      size=c(LWD, LWD, LWD2, LWD, LWD, LWD)),
+                                                      size=c(LWD, LWD, LWD2, LWD, LWD, LWD2)),
                                     ncol=2, byrow=FALSE))
 
         # Finish plot
@@ -875,6 +878,7 @@ function(input, output, session) {
             geom_line(size=LWD2) +
             lims(x=c(0, Tfinal()+1)) +
             my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
+            annotation_logticks(sides="l") +
             xlab("S-cell extinction time [days]") +
             ylab(paste0("lineage size [cells]"))
     })
@@ -922,6 +926,7 @@ function(input, output, session) {
             geom_line(aes(y=pmax(A, 0.1), col='mod.A'), size=LWD) +
             geom_line(aes(y=pmax(N, 0.1), col='mod.N'), size=LWD) +
             my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
+            annotation_logticks(sides="l") +
             scale_color_manual(breaks=c('mod.C', 'mod.S', 'mod.A', 'mod.N'),
                                labels=c('total (model)', 'S (model)', 'A (model)', 'N (model)'),
                                values=c('black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4'),
