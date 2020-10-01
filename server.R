@@ -404,6 +404,14 @@ function(input, output, session) {
             rank_size(san_stochastic_results_with_pcr_filtered()[, list(sid, day, lsize=R)])
         } else NULL
     })
+    san_stochastic_powerlawfit_with_pcr <- reactive({
+        if (!is.null(san_stochastic_ranksize_with_pcr_filtered())) {
+            ranksize_pcr <- san_stochastic_ranksize_with_pcr_filtered()
+            limit.alpha <- fit_pareto(ranksize_pcr[day >= LT47.LIMIT.ALPHA.STARTDAY])[, mean(alpha)]
+            fit_powerlaw_model(ranksize_pcr, alpha=limit.alpha)
+        } else NULL
+    })
+
     
     # The currently loaded parameterset
     # Note that this reflects the values of the parameters at loading time
@@ -717,6 +725,11 @@ function(input, output, session) {
             san_stochastic_ranksize_with_pcr_filtered()[day==input$day_lsd]
         } else data.table()
         
+        # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
+        powerlaw <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+            san_stochastic_powerlawfit_with_pcr()[day==input$day_lsd]
+        } else data.table()
+
         # Fetch experimental data
         rank_size.experiment <- LT47.RANKSIZE[day==input$day_lsd]
         
@@ -743,6 +756,13 @@ function(input, output, session) {
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
+        if (nrow(powerlaw) > 0) {
+            p <- p + geom_vline(data=powerlaw, aes(xintercept=zipf.rank.min), col='darkcyan') +
+                annotate("text", x=powerlaw$zipf.rank.min, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" Zipf-governed ->") +
+                annotate("text", x=powerlaw$zipf.rank.min, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" <- non-Zipf-governed")
+        }
         
         # Draw rank-size curves for the experimental lineage sizes in all replicates
         plot_rank_size <- function(rank_size, col, ...) {
@@ -797,6 +817,13 @@ function(input, output, session) {
             )]
         } else data.table()
 
+        # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
+        log_powerlaw <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+            san_stochastic_powerlawfit_with_pcr()[day==input$day_lsd][, list(
+                sid, log_zipf.rank.min=log10(zipf.rank.min)
+            )]
+        } else data.table()
+
         # Fetch experimental data
         log_lsize.experiment <- LT47[day==input$day_lsd, list(
             sid, log_lsize=log10(lsize)
@@ -816,6 +843,13 @@ function(input, output, session) {
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
+        if (nrow(log_powerlaw) > 0) {
+            p <- p + geom_vline(data=log_powerlaw, aes(xintercept=log_zipf.rank.min), col='darkcyan') +
+                annotate("text", x=log_powerlaw$log_zipf.rank.min, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" Zipf-governed ->") +
+                annotate("text", x=log_powerlaw$log_zipf.rank.min, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" <- non-Zipf-governed")
+        }
 
         # Draw densities
         if (nrow(log_lsize.experiment) > 0) {
@@ -864,17 +898,15 @@ function(input, output, session) {
         lsd <- results[, list(nlineages=sum(C > 0)), by=day]
         lsd_scells <- results[, list(nlineages=sum(S > 0)), by=day]
 
-         # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        if (!is.null(san_stochastic_ranksize_with_pcr_filtered()))
-        {
-            ranksize_pcr <- san_stochastic_ranksize_with_pcr_filtered()
-            lsd_pcr <- ranksize_pcr[, list(nlineages=.N), by=day]
-            limit.alpha <- fit_pareto(ranksize_pcr[day >= LT47.LIMIT.ALPHA.STARTDAY])[, mean(alpha)]
-            lsd_powerlaw <- fit_powerlaw_model(ranksize_pcr, alpha=limit.alpha)
-        } else {
-            lsd_pcr <- data.table()
-            lsd_powerlaw <- data.table()
-        }
+        # Compute the number of lineages observed through sequencing
+        lsd_pcr <- if (!is.null(san_stochastic_ranksize_with_pcr_filtered())) {
+            san_stochastic_ranksize_with_pcr_filtered()[, list(nlineages=.N), by=day]
+        } else data.table()
+
+        # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
+        lsd_powerlaw <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+            san_stochastic_powerlawfit_with_pcr()
+        } else data.table()
         
         # Draw plot
         p <- ggplot(data=NULL, aes(x=day, y=nlineages)) +
