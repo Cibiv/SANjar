@@ -34,7 +34,7 @@ fluidPage(
                           column(width=6,
                                  tags$label(class="control-label", "Organoid composition, model vs. data"),
                                  plotOutput("deterministic_celltypes", height="500px"))),
-                 fluidRow(column(width=6,
+                 fluidRow(column(width=3,
                                  checkboxInput("deterministic_cellcounts_incsim", width="100%",
                                                label = "also show simulated cell counts", value=FALSE)))
         ),
@@ -46,9 +46,11 @@ fluidPage(
                                  tags$label(class="control-label", "Number of lineages, model vs. data"),
                                  withSpinner(plotOutput("stochastic_nlineages", width="100%"), hide.ui=FALSE))),
                  fluidRow(column(width=6,
-                                 checkboxInput("stochastic_lsd_incpuremodel", label="also show model without PCR+Sequencing", value=TRUE)),
+                                 checkboxInput("stochastic_lsd_incpuremodel", label="show pure SAN model without PCR+Sequencing", value=FALSE, width="100%"),
+                                 checkboxInput("stochastic_lsd_incpowerlaw", label="show powerlaw model", value=FALSE, width="100%")),
                           column(width=6,
-                                 checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE))),
+                                 checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE, width="100%"),
+                                 checkboxInput("stochastic_nlineages_incpowerlaw", label="show powerlaw model", value=FALSE, width="100%"))),
                  fluidRow(
                           column(width=3,
                                  selectInput("day_lsd", label = "Day to show",

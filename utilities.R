@@ -74,7 +74,8 @@ fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(15, 100)) {
     s <- size[r]
     #
     # 4. Return model fit
-    list(pareto.alpha=a, zipf.k=k, zipf.d=d, zipf.rank.min=r, zipf.size.max=s)
+    list(pareto.alpha=a, zipf.k=k, zipf.d=d, zipf.rank.min=r, zipf.size.max=s,
+         large.k=m.small$coefficients[2], large.d=m.small$coefficients[1])
   }], by=.(sid, day)]
   setkey(r, sid, day)
   r

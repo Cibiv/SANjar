@@ -726,7 +726,7 @@ function(input, output, session) {
         } else data.table()
         
         # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        powerlaw <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+        powerlaw <- if (input$stochastic_lsd_incpowerlaw && !is.null(san_stochastic_powerlawfit_with_pcr())) {
             san_stochastic_powerlawfit_with_pcr()[day==input$day_lsd]
         } else data.table()
 
@@ -742,26 +742,27 @@ function(input, output, session) {
         ymax <- 10^(ceiling(log10(curves.ymax)))
 
         # Legend overrides
-        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
-                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
+        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid", `powerlaw`="solid"),
+                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2, `powerlaw`=LWD2))
         groups <- list()
 
         # Setup plot
         p <- ggplot() +
-            my_scale_log10(scale_x_log10, limits=c(1, xmax)) +
-            my_scale_log10(scale_y_log10, limits=c(ymin, ymax)) +
+            my_scale_log10(scale_x_log10, limits=c(1, xmax), oob=oob_keep) +
+            my_scale_log10(scale_y_log10, limits=c(ymin, ymax), oob=oob_keep) +
             annotation_logticks(sides="bl") +
             xlab("rank") +
             ylab("lineage size [norm. reads]") +
-            scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
-                               values=c('maroon', 'violet', 'black'),
+            scale_color_manual(breaks=c('data', 'model', 'model+seq.', 'powerlaw'),
+                               values=c('maroon', 'violet', 'black', 'darkcyan'),
                                name=NULL)
-        if (nrow(powerlaw) > 0) {
-            p <- p + geom_vline(data=powerlaw, aes(xintercept=zipf.rank.min), col='darkcyan') +
-                annotate("text", x=powerlaw$zipf.rank.min, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" Zipf-governed ->") +
-                annotate("text", x=powerlaw$zipf.rank.min, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" <- non-Zipf-governed")
+        if (input$stochastic_lsd_incpowerlaw && (nrow(powerlaw) > 0)) {
+            model_pcr.rm <- max(rank_size.model_pcr$rank)
+            model_pcr.sm <- min(rank_size.model_pcr$size)
+            model_pcr.r.scale <- curves.xmax / model_pcr.rm
+            model_pcr.s.scale <- curves.ymin / model_pcr.sm
+            p <- p + geom_vline(data=powerlaw, aes(xintercept=zipf.rank.min*model_pcr.r.scale), col='darkcyan',
+                                linetype="dotted", size=LWD)
         }
         
         # Draw rank-size curves for the experimental lineage sizes in all replicates
@@ -787,6 +788,26 @@ function(input, output, session) {
         if (nrow(rank_size.model_pcr) > 0) {
             groups[length(groups)+1] <- "model+seq."
             plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
+        }
+        if (input$stochastic_lsd_incpowerlaw && (nrow(powerlaw) > 0)) {
+            groups[length(groups)+1] <- "powerlaw"
+            p <- (p +
+                geom_segment(data=powerlaw, aes(x=1*model_pcr.r.scale,
+                                                y=(10^large.d)*model_pcr.s.scale,
+                                                xend=zipf.rank.min*model_pcr.r.scale,
+                                                yend=(10^large.d)*(zipf.rank.min^large.k)*model_pcr.s.scale,
+                                                col='powerlaw'),
+                              linetype='solid', size=LWD2) +
+                geom_segment(data=powerlaw, aes(x=zipf.rank.min*model_pcr.r.scale,
+                                                y=(10^zipf.d)*(zipf.rank.min^zipf.k)*model_pcr.s.scale,
+                                                xend=model_pcr.rm*model_pcr.r.scale,
+                                                yend=(10^zipf.d)*(model_pcr.rm^zipf.k)*model_pcr.s.scale,
+                                                col='powerlaw'),
+                              linetype='solid', size=LWD2) +
+                annotate("text", x=powerlaw$zipf.rank.min*model_pcr.r.scale, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" powerlaw tail ->", size=5) +
+                annotate("text", x=powerlaw$zipf.rank.min*model_pcr.r.scale, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" <- roughly uniform size", size=5))
         }
         
         #  If nothing was plottet, return empty
@@ -818,7 +839,7 @@ function(input, output, session) {
         } else data.table()
 
         # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        log_powerlaw <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+        log_powerlaw <- if (input$stochastic_lsd_incpowerlaw && (!is.null(san_stochastic_powerlawfit_with_pcr()))) {
             san_stochastic_powerlawfit_with_pcr()[day==input$day_lsd][, list(
                 sid, log_zipf.rank.min=log10(zipf.rank.min)
             )]
@@ -843,12 +864,12 @@ function(input, output, session) {
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
-        if (nrow(log_powerlaw) > 0) {
+        if (input$stochastic_lsd_incpowerlaw && (nrow(log_powerlaw) > 0)) {
             p <- p + geom_vline(data=log_powerlaw, aes(xintercept=log_zipf.rank.min), col='darkcyan') +
                 annotate("text", x=log_powerlaw$log_zipf.rank.min, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" Zipf-governed ->") +
+                         label=" powertail tail ->", size=5) +
                 annotate("text", x=log_powerlaw$log_zipf.rank.min, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" <- non-Zipf-governed")
+                         label=" <- roughtly uniform size ", size=5)
         }
 
         # Draw densities
@@ -904,11 +925,20 @@ function(input, output, session) {
         } else data.table()
 
         # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        lsd_powerlaw <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+        lsd_powerlaw <- if (input$stochastic_nlineages_incpowerlaw && (!is.null(san_stochastic_powerlawfit_with_pcr()))) {
             san_stochastic_powerlawfit_with_pcr()
         } else data.table()
         
+        # Legend overrides
+        legend.override <- list(linetype=c(`exp.obs`="dashed", `mod.all`="solid",  `mod.obs`="solid",
+                                           `mod.S`="solid", `exp.nonzipf`="dashed", `mod.nonzipf`="solid"),
+                                size=c(`exp.obs`=LWD, `mod.all`=LWD, `mod.obs`=LWD2,
+                                       `mod.S`=LWD, `exp.nonzipf`=LWD, `mod.nonzipf`=LWD2))
+        groups <- list()
+
         # Draw plot
+        groups[length(groups)+1] <- "exp.obs"
+        groups[length(groups)+1] <- "mod.all"
         p <- ggplot(data=NULL, aes(x=day, y=nlineages)) +
             stat_summary(data=LT47.NLINEAGES, aes(col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
             stat_summary(data=LT47.NLINEAGES, aes(col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
@@ -917,27 +947,36 @@ function(input, output, session) {
             p <- p +
                 my_scale_log10(scale_y_log10) +
                 annotation_logticks(sides="l")
-        if (nrow(lsd_pcr) > 0)
+        if (nrow(lsd_pcr) > 0) {
+            groups[length(groups)+1] <- "mod.obs"
             p <- p + geom_line(data=lsd_pcr, aes(col='mod.obs'), size=LWD2)
-        if (nrow(lsd_powerlaw) > 0)
-            p <- p + geom_line(data=lsd_powerlaw, aes(y=zipf.rank.min, col='mod.nonzipf'), size=LWD2)
+        }
+        if (input$stochastic_nlineages_incpowerlaw && (nrow(lsd_powerlaw) > 0)) {
+            groups[length(groups)+1] <- "mod.nonzipf"
+            groups[length(groups)+1] <- "exp.nonzipf"
+            p <- (p +
+                geom_line(data=lsd_powerlaw, aes(y=zipf.rank.min, col='mod.nonzipf'), size=LWD2) +
+                stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+                stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD))
+        }
+
+        # Add legend
+        groups[length(groups)+1] <- "mod.S"
+        groups.all <- c('exp.obs', 'exp.nonzipf', 'mod.obs', 'mod.all', 'mod.S', 'mod.nonzipf')
+        groups <- groups.all[groups.all %in% groups]
         p <- p +
-            stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-            stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd_scells, aes(col='mod.S'), size=LWD) +
-            scale_color_manual(breaks=c('exp.obs', 'exp.nonzipf', 'mod.obs', 'mod.all', 'mod.S', 'mod.nonzipf'),
-                               labels=c('obs. (data)', 'non-Zipf  (data)', 'obs. (model+seq.)',
-                                        'total (model)', 'extant S-cells (model)', 'non-Zipf (model+seq.)'),
+            scale_color_manual(breaks=groups.all,
+                               labels=c('obs. (data)', 'outside powerlaw tail (data)', 'obs. (model+seq.)',
+                                        'total (model)', 'extant S-cells (model)', 'outside powerlaw tail (model+seq.)'),
                                values=c('maroon', 'slateblue3', 'black', 'violet', 'cornflowerblue', 'darkcyan'),
                                name=NULL) +
             xlab("time [days]") +
-            ylab("number of lineages") +
-            guides(col=guide_legend(override.aes=list(linetype=c("dashed", "dashed", "solid", "solid", "solid", "solid"),
-                                                      size=c(LWD, LWD, LWD2, LWD, LWD, LWD2)),
-                                    ncol=2, byrow=FALSE))
+            ylab("number of lineages")
 
-        # Return plot
-        p
+        # Finish plot
+        p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
+                                    ncol=2, byrow=FALSE))
     })
 
     # S-cell extinction dynamics
