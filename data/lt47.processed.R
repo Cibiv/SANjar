@@ -4,23 +4,24 @@ library(gwpcR)
 # Load lineage size data
 message("*** Loading LT47 from lt47.rd")
 load("lt47.rd")
+META <- LT47[, list(sample=sample[1]), keyby=.(sid, day)]
 
 message("*** Removing low-quality samples")
 LT47 <- LT47[!(sid %in% c(15, 16))]
 
 # Compute number of observed lineages at each time point
 message("*** Computing LT47.NLINEAGES")
-LT47.NLINEAGES <- LT47[, list(nlineages=as.integer(sum(lsize > 0))), by=c("day", "sid")] 
+LT47.NLINEAGES <- META[ LT47[, list(nlineages=as.integer(sum(lsize > 0))), keyby=c("sid", "day")] ]
 
 message("*** Computing LT47.RANKSIZE")
-LT47.RANKSIZE <- rank_size(LT47)
+LT47.RANKSIZE <- META[ rank_size(LT47) ]
 
 message("*** Computing LT47.POWERLAW")
 # Compute powerlaw fits
 LT47.LIMIT.ALPHA.STARTDAY <- 11
-LT47.LIMIT.ALPHA <- signif(LT47[, fit_pareto(lsize), by=c("day", "sid")][
-  day >= LT47.LIMIT.ALPHA.STARTDAY, mean(alpha)], digits=2)
-LT47.POWERLAW <- fit_powerlaw_model(LT47.RANKSIZE, alpha=LT47.LIMIT.ALPHA, by=c("sid", "sample", "day"))
+LT47.LIMIT.ALPHA <- fit_pareto(LT47[day >= LT47.LIMIT.ALPHA.STARTDAY, list(sid, day, size=lsize)])[
+  , signif(mean(alpha), digits=2) ]
+LT47.POWERLAW <- META[ fit_powerlaw_model(LT47.RANKSIZE, alpha=LT47.LIMIT.ALPHA) ]
 LT47.POWERLAW[, zipf.k := signif(zipf.k, digits=3) ]
 LT47.POWERLAW[, zipf.d := signif(zipf.d, digits=3) ]
 
