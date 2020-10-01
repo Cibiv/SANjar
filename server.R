@@ -199,44 +199,61 @@ function(input, output, session) {
     san_deterministic_results <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
-            r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)
-            r[, C := S + A + N]
+            r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)[, list(
+                sid=-1, day=t,
+                S, A, N,
+                C=S+A+N
+            )]
+            setkey(r, sid, day)
             r
         } else NULL
     })
 
     # Simulating the stochastic model is slow, so we cache the result
-    # The result is a table with columns t, S, A, N and C, where C
-    # is the total organoid size, i.e. S+A+N.
+    # The result is a table with columns day, lid, S, A, N and C=S+A+N
     san_stochastic_results <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
             message("Simulating the SAN model")
             r <- san_stochastic(L=input$s0, rates=input_rates(), samples_per_day=1,
-                                p_cutoff=as.numeric(input$p_cutoff))
-            r[, C := S + A + N]
+                                p_cutoff=as.numeric(input$p_cutoff))[, list(
+                sid=-1,
+                day=t,
+                dt, lid, S, A, N,
+                C=S+A+N
+            )]
+            setkey(r, sid, day, lid)
             r
         } else NULL
     })
-    
+    san_stochastic_ranksize <- reactive({
+        if (!is.null(san_stochastic_results())) {
+            rank_size(san_stochastic_results()[, list(sid, day, lsize=C)])
+        } else NULL
+    })
+
     san_stochastic_extinction_trajectories <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
             L=as.integer(input$scellext_nlineages)
             message("Simulating ", L, " lineages under the SAN model to obtain average extinction trajectories")
             r <- san_stochastic(L=L, rates=input_rates(), samples_per_day=1,
-                                p_cutoff=as.numeric(input$p_cutoff))
-            r[, C := S + A + N]
+                                p_cutoff=as.numeric(input$p_cutoff))[, list(
+                day=t,
+                dt, lid, S, A, N,
+                C=S+A+N
+            )]
             r[, Text.S := {
-                t.is.ext.S <- t[S == 0]
+                t.is.ext.S <- day[S == 0]
                 if (length(t.is.ext.S) > 0) min(t.is.ext.S) else Inf
-            }, by="lid"][, list(
+            }, by=lid]
+            r[, list(
                 C=mean(C), C.sd=sd(C),
                 S=mean(S), S.sd=sd(S),
                 A=mean(A), A.sd=sd(A),
                 N=mean(N), N.sd=sd(N),
                 nlineages=.N
-            ), keyby=c("t", "Text.S")]
+            ), keyby=.(day, Text.S)]
         } else NULL
     })
 
@@ -251,7 +268,7 @@ function(input, output, session) {
             A=sum(A), A.sd=sd(A)*sqrt(.N),
             N=sum(N), N.sd=sd(N)*sqrt(.N),
             dt=if(any(!is.na(dt))) min(dt, na.rm=TRUE) else NA_real_
-        ), keyby="t"]
+        ), keyby=day]
         # Compute the z-scores for the deviation of the total counts from the expectation
         mod.sim.zscore <- mod.sim.agg[mod.exp, list(
             S=(S - i.S) / S.sd,
@@ -288,10 +305,10 @@ function(input, output, session) {
     # PCR efficiency parameter
     pcr_efficiency_manual_or_auto <- reactive({
         if (!is.na(input$pcr_efficiency) && (input$pcr_efficiency >= 0) && (input$pcr_efficiency <= 1)) {
-            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency=input$pcr_efficiency), keyby="day"]
+            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency), keyby="day"]
+            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency), keyby=day]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -305,10 +322,10 @@ function(input, output, session) {
     # Sequencing library size parameter
     library_size_manual_or_auto <- reactive({
         if (!is.na(input$library_size) && (input$library_size > 0)) {
-            ls <- LT47.GWPCR.PARAMETERS[, list(library_size=(input$library_size)), keyby="day"]
+            ls <- LT47.GWPCR.PARAMETERS[, list(library_size=(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- LT47.GWPCR.PARAMETERS[, list(library_size), keyby="day"]
+            ls <- LT47.GWPCR.PARAMETERS[, list(library_size), keyby=day]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -327,10 +344,10 @@ function(input, output, session) {
     # Sequencing read-count threshold parameter
     phantom_threshold_manual_or_auto <- reactive({
         if (!is.na(input$phantom_threshold) && (input$phantom_threshold > 0)) {
-            th <- LT47.GWPCR.PARAMETERS[, list(phantom_threshold=(input$phantom_threshold)), keyby="day"]
+            th <- LT47.GWPCR.PARAMETERS[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  LT47.GWPCR.PARAMETERS[, list(phantom_threshold), keyby="day"]
+            th <-  LT47.GWPCR.PARAMETERS[, list(phantom_threshold), keyby=day]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
@@ -347,24 +364,31 @@ function(input, output, session) {
         if (!is.null(san_stochastic_results())) {
             message("Simulating PCR and sequencing")
             # Days for which experimental data is available
-            days <- LT47[, list(), keyby="day"]
+            days <- LT47[, list(), keyby=day]
             # Compute total number of cells in each simulated sample
-            total_sizes <- san_stochastic_results()[, list(C.total=sum(as.numeric(C))), keyby="t"]
+            total_sizes <- san_stochastic_results()[, list(C.total=sum(as.numeric(C))), keyby=day]
             # Simulate read counts under the gwpcR PCR model
             # The sequencing depth is computed from the total number of cells,
             # and the library size. The resulting table has the additional column
             # "R" containing the simulated read count.
-            (san_stochastic_results()
-                [total_sizes, on="t"]
-                [pcr_efficiency_manual_or_auto(), on=c(t="day")]
-                [library_size_manual_or_auto(), on=c(t="day")]
+            r <- (san_stochastic_results()
+                [total_sizes, on="day"]
+                [pcr_efficiency_manual_or_auto(), on="day"]
+                [library_size_manual_or_auto(), on="day"]
                 [, list(
-                    t, dt, lid, S, A, N, C,
+                    dt, lid, S, A, N,
                     R=if (C > 0)
                         rgwpcrpois(.N, efficiency=pcr_efficiency[1], threshold=0,
                                    molecules=C, lambda0=as.numeric(C)*library_size[1]/C.total[1])
                     else 0
-                ), by=c("t", "C")])
+                ), by=.(sid, day, C)])
+            setkey(r, sid, day, lid)
+            r
+        } else NULL
+    })
+    san_stochastic_ranksize_with_pcr <- reactive({
+        if (!is.null(san_stochastic_results_with_pcr())) {
+            rank_size(san_stochastic_results_with_pcr()[, list(sid, day, lsize=R)])
         } else NULL
     })
     
@@ -372,8 +396,13 @@ function(input, output, session) {
     san_stochastic_results_with_pcr_filtered <- reactive({
         if (!is.null(san_stochastic_results_with_pcr())) {
             sim <- san_stochastic_results_with_pcr()
-            sim[phantom_threshold_manual_or_auto()[sim, phantom_threshold, on=c(day="t")] <= R]
+            sim[phantom_threshold_manual_or_auto()[sim, phantom_threshold, on="day"] <= R]
         }
+    })
+    san_stochastic_ranksize_with_pcr_filtered <- reactive({
+        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            rank_size(san_stochastic_results_with_pcr_filtered()[, list(sid, day, lsize=R)])
+        } else NULL
     })
     
     # The currently loaded parameterset
@@ -530,21 +559,31 @@ function(input, output, session) {
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
         r <- san_deterministic_results()[, list(
-            t,
+            day,
             C=pmax(C, 1),
             S=pmax(S, 1),
             A=pmax(A, 1),
             N=pmax(N, 1)
         )]
 
+        # Show stochastic simulation results for comparison if requested
+        r.sim <- if (input$deterministic_cellcounts_incsim && !is.null(san_stochastic_results())) {
+            san_stochastic_results()[, list(
+                C=pmax(sum(C), 1),
+                S=pmax(sum(S), 1),
+                A=pmax(sum(A), 1),
+                N=pmax(sum(N), 1)
+            ), keyby=day]
+        } else data.table()
+
         # Plot results
-        p <- ggplot(data=r) +
-            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
-            stat_summary(data=ORGANOIDSIZES, aes(x=day, y=count, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(aes(x=t, y=C, col='mod.C', linetype='mod.ana'), size=LWD2) +
-            geom_line(aes(x=t, y=S, col='mod.S', linetype='mod.ana'), size=LWD) +
-            geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
-            geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.ana'), size=LWD) +
+        p <- ggplot(data=r, aes(x=day)) +
+            stat_summary(data=ORGANOIDSIZES, aes(y=count, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
+            stat_summary(data=ORGANOIDSIZES, aes(y=count, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            geom_line(aes(y=C, col='mod.C', linetype='mod.ana'), size=LWD2) +
+            geom_line(aes(y=S, col='mod.S', linetype='mod.ana'), size=LWD) +
+            geom_line(aes(y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
+            geom_line(aes(y=N, col='mod.N', linetype='mod.ana'), size=LWD) +
             my_scale_log10(scale_y_log10, limits=c(1e2, 1e7), oob=oob_keep) +
             annotation_logticks(sides="l") +
             scale_color_manual(breaks=c('exp.C', 'mod.C', 'mod.S', 'mod.A', 'mod.N'),
@@ -557,23 +596,17 @@ function(input, output, session) {
             guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'solid', 'solid', 'solid', 'solid'),
                                                       size=c(LWD, LWD2, LWD, LWD, LWD)),
                                     ncol=2, byrow=FALSE),
-                   linetype=if (input$deterministic_cellcounts_incsim && !is.null(san_stochastic_results()))
+                   linetype=if (nrow(r.sim) > 0)
                        guide_legend(override.aes=list(size=c(LWD)),
                                     ncol=1, byrow=FALSE)
                    else
                        guide_none())
 
-        if (input$deterministic_cellcounts_incsim && !is.null(san_stochastic_results())) {
-            r.sim <- san_stochastic_results()[, list(
-                C=pmax(sum(C), 1),
-                S=pmax(sum(S), 1),
-                A=pmax(sum(A), 1),
-                N=pmax(sum(N), 1)
-            ), keyby="t"]
-            p <- p + geom_line(data=r.sim, aes(x=t, y=C, col='mod.C', linetype='mod.sim'), size=LWD) +
-                geom_line(data=r.sim, aes(x=t, y=S, col='mod.S', linetype='mod.sim'), size=LWD) +
-                geom_line(data=r.sim, aes(x=t, y=A, col='mod.A', linetype='mod.sim'), size=LWD) +
-                geom_line(data=r.sim, aes(x=t, y=N, col='mod.N', linetype='mod.sim'), size=LWD) +
+        if (nrow(r.sim) > 0) {
+            p <- p + geom_line(data=r.sim, aes(y=C, col='mod.C', linetype='mod.sim'), size=LWD) +
+                geom_line(data=r.sim, aes(y=S, col='mod.S', linetype='mod.sim'), size=LWD) +
+                geom_line(data=r.sim, aes(y=A, col='mod.A', linetype='mod.sim'), size=LWD) +
+                geom_line(data=r.sim, aes(y=N, col='mod.N', linetype='mod.sim'), size=LWD) +
                 scale_linetype_manual(breaks=c('mod.ana', 'mod.sim'),
                                       labels=c('theoretical', 'simulation'),
                                       values=c('solid', 'dotted'),
@@ -591,7 +624,7 @@ function(input, output, session) {
         # Evaluate deterministic SAN model
         # We cut cell counts off at 0.1 to avoid plotting problems
         r <- san_deterministic_results()[,  list(
-            t,
+            day,
             S=100 * pmax(S, 1) / C,
             A=100 * pmax(A, 1) / C,
             N=100 * pmax(N, 1) / C
@@ -602,20 +635,20 @@ function(input, output, session) {
         CT.TRA160 <- CELLTYPES[antibody=="TRA1-60"]
 
         # Plot results
-        p <- ggplot(data=as.data.table(r)) +
-            stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4', linetype='exp.CXRC4'), fun=mean, geom="line", size=LWD) +
-            stat_summary(data=CT.CXRC4, aes(x=day, y=percent, col='exp.CXRC4'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM', linetype='exp.NCAM'), fun=mean, geom="line", size=LWD) +
-            stat_summary(data=CT.NCAM, aes(x=day, y=percent, col='exp.NCAM'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160', linetype='exp.TRA160'), fun=mean, geom="line", size=LWD) +
-            stat_summary(data=CT.TRA160, aes(x=day, y=percent, col='exp.TRA160'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(aes(x=t, y=S, col='mod.S', linetype='mod.S'), size=LWD) +
-            geom_line(aes(x=t, y=A, col='mod.A', linetype='mod.A'), size=LWD) +
-            geom_line(aes(x=t, y=N, col='mod.N', linetype='mod.N'), size=LWD) +
-            geom_line(aes(x=t, y=S+A, col='mod.S+A'), size=LWD) +
-            geom_line(aes(x=t, y=S+A, col='mod.A', linetype='mod.S+A'), size=LWD) +
-            geom_line(aes(x=t, y=A+N, col='mod.A+N'), size=LWD) +
-            geom_line(aes(x=t, y=A+N, col='mod.N', linetype='mod.A+N'), size=LWD) +
+        p <- ggplot(data=as.data.table(r), aes(x=day, y=percent)) +
+            stat_summary(data=CT.CXRC4, aes(col='exp.CXRC4', linetype='exp.CXRC4'), fun=mean, geom="line", size=LWD) +
+            stat_summary(data=CT.CXRC4, aes(col='exp.CXRC4'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=CT.NCAM, aes(col='exp.NCAM', linetype='exp.NCAM'), fun=mean, geom="line", size=LWD) +
+            stat_summary(data=CT.NCAM, aes(col='exp.NCAM'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=CT.TRA160, aes(col='exp.TRA160', linetype='exp.TRA160'), fun=mean, geom="line", size=LWD) +
+            stat_summary(data=CT.TRA160, aes(col='exp.TRA160'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            geom_line(aes(y=S, col='mod.S', linetype='mod.S'), size=LWD) +
+            geom_line(aes(y=A, col='mod.A', linetype='mod.A'), size=LWD) +
+            geom_line(aes(y=N, col='mod.N', linetype='mod.N'), size=LWD) +
+            geom_line(aes(y=S+A, col='mod.S+A'), size=LWD) +
+            geom_line(aes(y=S+A, col='mod.A', linetype='mod.S+A'), size=LWD) +
+            geom_line(aes(y=A+N, col='mod.A+N'), size=LWD) +
+            geom_line(aes(y=A+N, col='mod.N', linetype='mod.A+N'), size=LWD) +
             scale_color_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
                                         'mod.S', 'mod.A', 'mod.N',
                                         'mod.S+A', 'mod.A+N'),
@@ -673,21 +706,16 @@ function(input, output, session) {
     # Lineage size distribution
     plot_stochastic_lsd_logrank_loglineagesize <- reactive({
         message("Rendering rank-abundance plot of the lineage size distribution ")
-        if (is.null(san_stochastic_results()))
-            return()
 
         # Simulate stochastic SAN model
-        rank_size.model <- if (input$stochastic_lsd_incpuremodel) {
-            rank_size(san_stochastic_results()[t==input$day_lsd, list(sid=-1, lsize=C)][lsize > 0],
-                      by="sid")
+        rank_size.model <- if (input$stochastic_lsd_incpuremodel && !is.null(san_stochastic_ranksize())) {
+            san_stochastic_ranksize()[(day==input$day_lsd) & (size > 0)]
         } else data.table()
 
         # Simulate PCR+Sequencing
-        rank_size.model_pcr <- if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            rank_size(san_stochastic_results_with_pcr_filtered()[t==input$day_lsd, list(sid=-1, lsize=R)],
-                      by="sid")
+        rank_size.model_pcr <- if (!is.null(san_stochastic_ranksize_with_pcr_filtered())) {
+            san_stochastic_ranksize_with_pcr_filtered()[day==input$day_lsd]
         } else data.table()
-
         
         # Fetch experimental data
         rank_size.experiment <- LT47.RANKSIZE[day==input$day_lsd]
@@ -726,7 +754,7 @@ function(input, output, session) {
                                             size.norm=curves.ymin*size/sm)]
                 p <<- p + geom_line(data=curve.aligned, aes(x=rank.shift, y=size.norm, col=col), ...)
                 NULL
-            }, by="sid"]
+            }, by=sid]
         }
         if (nrow(rank_size.experiment) > 0) {
             groups[length(groups)+1] <- "data"
@@ -741,6 +769,11 @@ function(input, output, session) {
             plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
         }
         
+        #  If nothing was plottet, return empty
+        if (length(groups) == 0)
+            return()
+
+        # Finish and return plot
         p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
                                     ncol=3, byrow=TRUE))
     })
@@ -752,21 +785,22 @@ function(input, output, session) {
 
         # Simulate stochastic SAN model
         log_lsize.model <- if (input$stochastic_lsd_incpuremodel) {
-            san_stochastic_results()[
-                (t==input$day_lsd) & (C > 0),
-                list(sid=-1, log_lsize=log10(C))]
-        } else NULL
+            san_stochastic_results()[(day==input$day_lsd) & (C > 0), list(
+                sid, log_lsize=log10(C)
+            )]
+        } else data.table()
+
+        # Simulate PCR+Sequencing
+        log_lsize.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+            san_stochastic_results_with_pcr_filtered()[day==input$day_lsd, list(
+                sid, log_lsize=log10(R)
+            )]
+        } else data.table()
 
         # Fetch experimental data
-        log_lsize.experiment <- LT47[
-            day==input$day_lsd,
-            list(sid, log_lsize=log10(lsize))]
-
-        log_lsize.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            san_stochastic_results_with_pcr_filtered()[
-                (t==input$day_lsd) & (R > 0),
-                list(sid=-1, log_lsize=log10(R))]
-        } else NULL
+        log_lsize.experiment <- LT47[day==input$day_lsd, list(
+            sid, log_lsize=log10(lsize)
+        )]
 
         # Legend overrides
         legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
@@ -790,18 +824,22 @@ function(input, output, session) {
                 p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize, col='data'),
                                        geom="line", size=LWD, linetype="dashed")
                 NULL
-            }, by="sid"]
+            }, by=sid]
         }
-        if (input$stochastic_lsd_incpuremodel && !is.null(log_lsize.model)) {
+        if (input$stochastic_lsd_incpuremodel && (nrow(log_lsize.model) > 0)) {
             groups[length(groups)+1] <- "model"
             p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize, col='model'),
                                   geom="line", size=LWD)
         }
-        if (!is.null(log_lsize.model_pcr)) {
+        if (nrow(log_lsize.model_pcr) > 0) {
             groups[length(groups)+1] <- "model+seq."
             p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize, col='model+seq.'),
                                   geom="line", size=LWD2)
         }
+
+        #  If nothing was plottet, return empty
+        if (length(groups) == 0)
+            return()
 
         # Finish plot
         p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
@@ -821,37 +859,40 @@ function(input, output, session) {
         if (is.null(san_stochastic_results()))
             return()
         
-        lsd <- san_stochastic_results()[, list(nlineages=sum(C > 0)), by="t"]
-        lsd_scells <- san_stochastic_results()[, list(nlineages=sum(S > 0)), by="t"]
-        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            r <- san_stochastic_results_with_pcr_filtered()
-            lsd_pcr <- r[, list(nlineages=.N), by="t"]
-            limit.alpha <- r[t >= LT47.LIMIT.ALPHA.STARTDAY][, fit_pareto(R), by=c("t")][,
-                mean(alpha)
-            ]
-            lsd_powerlaw <- fit_powerlaw_model(rank_size(r[, list(t, lsize=R)], by="t"),
-                                               alpha=limit.alpha, by="t")
+        # Compute the numbef of lineages and the number of lineages with extant S-cells
+        results <- san_stochastic_results()
+        lsd <- results[, list(nlineages=sum(C > 0)), by=day]
+        lsd_scells <- results[, list(nlineages=sum(S > 0)), by=day]
+
+         # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
+        if (!is.null(san_stochastic_ranksize_with_pcr_filtered()))
+        {
+            ranksize_pcr <- san_stochastic_ranksize_with_pcr_filtered()
+            lsd_pcr <- ranksize_pcr[, list(nlineages=.N), by=day]
+            limit.alpha <- fit_pareto(ranksize_pcr[day >= LT47.LIMIT.ALPHA.STARTDAY])[, mean(alpha)]
+            lsd_powerlaw <- fit_powerlaw_model(ranksize_pcr, alpha=limit.alpha)
+        } else {
+            lsd_pcr <- data.table()
+            lsd_powerlaw <- data.table()
         }
         
-        # Setup plot
-        p <- ggplot() +
-            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-            stat_summary(data=LT47.NLINEAGES, aes(x=day, y=nlineages, col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(data=lsd, aes(x=t, y=nlineages, col='mod.all'), size=LWD)
+        # Draw plot
+        p <- ggplot(data=NULL, aes(x=day, y=nlineages)) +
+            stat_summary(data=LT47.NLINEAGES, aes(col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+            stat_summary(data=LT47.NLINEAGES, aes(col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            geom_line(data=lsd, aes(col='mod.all'), size=LWD)
         if (input$stochastic_nlineages_logy)
             p <- p +
                 my_scale_log10(scale_y_log10) +
                 annotation_logticks(sides="l")
-
-        # Draw lines
-        if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            p <- p + geom_line(data=lsd_pcr, aes(x=t, y=nlineages, col='mod.obs'), size=LWD2)
-            p <- p + geom_line(data=lsd_powerlaw, aes(x=t, y=zipf.rank.min, col='mod.nonzipf'), size=LWD2)
-        }
+        if (nrow(lsd_pcr) > 0)
+            p <- p + geom_line(data=lsd_pcr, aes(col='mod.obs'), size=LWD2)
+        if (nrow(lsd_powerlaw) > 0)
+            p <- p + geom_line(data=lsd_powerlaw, aes(y=zipf.rank.min, col='mod.nonzipf'), size=LWD2)
         p <- p +
-            stat_summary(data=LT47.POWERLAW, aes(x=day, y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-            stat_summary(data=LT47.POWERLAW, aes(x=day, y=zipf.rank.min, col='exp.nonzipf'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(data=lsd_scells, aes(x=t, y=nlineages, col='mod.S'), size=LWD) +
+            stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+            stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            geom_line(data=lsd_scells, aes(col='mod.S'), size=LWD) +
             scale_color_manual(breaks=c('exp.obs', 'exp.nonzipf', 'mod.obs', 'mod.all', 'mod.S', 'mod.nonzipf'),
                                labels=c('obs. (data)', 'non-Zipf  (data)', 'obs. (model+seq.)',
                                         'total (model)', 'extant S-cells (model)', 'non-Zipf (model+seq.)'),
@@ -863,17 +904,24 @@ function(input, output, session) {
                                                       size=c(LWD, LWD, LWD2, LWD, LWD, LWD2)),
                                     ncol=2, byrow=FALSE))
 
-        # Finish plot
+        # Return plot
         p
     })
 
     # S-cell extinction dynamics
     output$stochastic_scellext_vs_lineagesize <- renderPlot({
-        ymax <- san_stochastic_extinction_trajectories()[, 10^ceiling(log10(max(C)))]
+        if (is.null(san_stochastic_extinction_trajectories()))
+            return()
 
-                t.max <- san_stochastic_extinction_trajectories()[, max(t)]
-        ggplot(data=san_stochastic_extinction_trajectories()[t==t.max],
-               aes(x=ifelse(is.finite(Text.S), Text.S, max(t)+1), y=pmax(C, 0.1), ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1))) +
+        ext_traj <- san_stochastic_extinction_trajectories()
+        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
+
+        day.max <- ext_traj[, max(day)]
+        ggplot(data=ext_traj[day==day.max],
+               aes(x=ifelse(is.finite(Text.S), Text.S, day.max+1),
+                   y=pmax(C, 0.1),
+                   ymin=pmax(C-C.sd, 0.1),
+                   ymax=pmax(C+C.sd, 0.1))) +
             geom_ribbon(alpha=0.15) +
             geom_line(size=LWD2) +
             lims(x=c(0, Tfinal()+1)) +
@@ -884,11 +932,16 @@ function(input, output, session) {
     })
 
     output$stochastic_scellext_vs_time <- renderPlot({
+        if (is.null(san_stochastic_extinction_trajectories()))
+            return()
+
         ext_traj <- san_stochastic_extinction_trajectories()
-        data <- rbind(ext_traj[, list(survived=sum(nlineages[Text.S > t]) / sum(nlineages)), by="t"],
-                      data.table(t=Tfinal()+1, survived=ext_traj[t==Tfinal(), sum(nlineages[is.infinite(Text.S)]) / sum(nlineages)]))
+        data <- rbind(ext_traj[, list(survived=sum(nlineages[Text.S > day]) / sum(nlineages))
+                               , by=day],
+                      data.table(day=Tfinal()+1,
+                                 survived=ext_traj[day==Tfinal(), sum(nlineages[is.infinite(Text.S)]) / sum(nlineages)]))
         ymin <- data[, min(survived)]
-        ggplot(data=data, aes(x=t, y=100*survived)) +
+        ggplot(data=data, aes(x=day, y=100*survived)) +
             geom_line(col='cornflowerblue') +
             lims(x=c(0, Tfinal()+1)) +
             scale_y_log10(limits=c(100*ymin, 100), oob=oob_keep) +
@@ -901,22 +954,26 @@ function(input, output, session) {
         HTML(stochastic_scellext_trajectory_label())
     })
     output$stochastic_scellext_trajectory <- renderPlot({
-        ymax <- san_stochastic_extinction_trajectories()[, 10^ceiling(log10(max(C)))]
+        if (is.null(san_stochastic_extinction_trajectories()))
+            return()
+
+        ext_traj <- san_stochastic_extinction_trajectories()
+        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
 
         # Plot results
         if (input$day_scellext <= Tfinal()) {
-            data <- san_stochastic_extinction_trajectories()[Text.S == input$day_scellext]
+            ext_traj_extday <- ext_traj[Text.S == input$day_scellext]
             stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction on day ", input$day_scellext))
-            if (nrow(data) < 1)
+            if (nrow(ext_traj_extday) < 1)
                 stop("simulation produced no lineages with S-cell extinction on day ", input$day_scellext)
         } else {
-            data <- san_stochastic_extinction_trajectories()[is.infinite(Text.S)]
+            ext_traj_extday <- san_stochastic_extinction_trajectories()[is.infinite(Text.S)]
             stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction <b>after</b> day ", Tfinal()))
-            if (nrow(data) < 1)
+            if (nrow(ext_traj_extday) < 1)
                 stop("simulation produced no lineages with S-cells surving past day ", Tfinal())
         }
 
-        ggplot(data=data, aes(x=t)) +
+        ggplot(data=ext_traj_extday, aes(x=day)) +
             geom_ribbon(aes(ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1), fill='mod.C'), alpha=0.2) +
             geom_ribbon(aes(ymin=pmax(S-S.sd, 0.1), ymax=pmax(S+S.sd, 0.1), fill='mod.S'), alpha=0.15) +
             geom_ribbon(aes(ymin=pmax(A-A.sd, 0.1), ymax=pmax(A+A.sd, 0.1), fill='mod.A'), alpha=0.15) +

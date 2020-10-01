@@ -4,17 +4,19 @@ library(data.table)
 #' 
 #' @param subset a `data.table` containing columns `sid` (sample id) and `lsize` (lineage size)
 #' @return a `data.table`  with columns `sid` (sample id), `rank` (lineage size rank) and `size` (lineage size)
-rank_size <- function(subset, by=c("sample", "sid", "day")) {
-  subset[, {
+rank_size <- function(subset) {
+  r <- subset[, {
     .SD[order(lsize, decreasing=TRUE)][, list(rank=1:.N, size=lsize)]
-  }, by=mget(by)]
+  }, by=.(sid, day)]
+  setkey(r, sid, day, rank)
+  r
 }
 
 #' Align rank-size curves
 align_rank_size <- function(ranked) {
   rank.max.all <- max(ranked$rank)
   size.min.all <- min(ranked$size)
-  ranked[, {
+  r <- ranked[, {
     rank.scale <- rank.max.all / (max(rank)-1)
     size.scale <- size.min.all / min(size)
     sm <- min(size)
@@ -22,14 +24,18 @@ align_rank_size <- function(ranked) {
          rank.aligned=(rank-1) * rank.scale + 1,
          size.aligned=size * size.scale,
          rank.scale, size.scale)
-  }, keyby="sid"]
+  }, by=day]
+  setkey(r, sid, day, rank)
+  r
 }
 
 fit_pareto <- function(sizes) {
-  # https://en.wikipedia.org/wiki/Pareto_distribution#Estimation_of_parameters
-  xm <- min(sizes)
-  alpha <- length(sizes) / sum(log(sizes/xm))
-  return(list(xm=xm, alpha=alpha))
+  sizes[, {
+    # https://en.wikipedia.org/wiki/Pareto_distribution#Estimation_of_parameters
+    xm <- min(size)
+    alpha <- length(size) / sum(log(size/xm))
+    list(xm=xm, alpha=alpha)
+  }, keyby=.(sid, day)]
 }
 
 #' Fit the powerlaw model to rank-size data
@@ -39,14 +45,14 @@ fit_pareto <- function(sizes) {
 #' @param r.large a two-component vector which specifies which range of ranks corresponds to "large" lineages 
 #' @return a `data.table` with columns `sid` (sample id), `alpha` (Pareto index), `k` (Zipf exponent),
 #'         `d` (Zipf intersect), `r` (smallest Zipf-goverened rank), `s` (largest Zipf-goverend lineage size).
-fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(15, 100), by=c("sid", "sample", "day")) {
+fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(15, 100)) {
   r <- ranked[, .SD[order(rank), {
     stopifnot(all(rank == 1:length(rank)))
     stopifnot(!is.unsorted(rev(size)))
     # 1. Fit powerlaw
     #
     # If no global alpha was specified, compute a sample-specific Pareto index alpha
-    a <- if (!is.na(alpha)) alpha else fit_pareto(size)$alpha
+    a <- if (!is.na(alpha)) alpha else fit_pareto(.SD[, list(sid, day, size)])$alpha
     # In log-log-space, the powerlaw model for the rank-size relationship is
     #   log(size) = k * log(rank) + d
     # where k = -1/alpha if the sizes follow a Pareto distribution with index alpha,
@@ -69,8 +75,8 @@ fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(15, 100), by=c("sid",
     #
     # 4. Return model fit
     list(pareto.alpha=a, zipf.k=k, zipf.d=d, zipf.rank.min=r, zipf.size.max=s)
-  }], by=mget(by)]
-  setkeyv(r, by[1])
+  }], by=.(sid, day)]
+  setkey(r, sid, day)
   r
 }
 
