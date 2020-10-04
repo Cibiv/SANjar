@@ -47,10 +47,14 @@ fit_pareto <- function(sizes) {
 #' @param r.large a two-component vector which specifies which range of ranks corresponds to "large" lineages 
 #' @return a `data.table` with columns `sid` (sample id), `alpha` (Pareto index), `k` (Zipf exponent),
 #'         `d` (Zipf intersect), `r` (smallest Zipf-goverened rank), `s` (largest Zipf-goverend lineage size).
-fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(15, 100)) {
+fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(NA_integer_, NA_integer_)) {
   r <- ranked[, .SD[order(rank), {
-    stopifnot(all(rank == 1:length(rank)))
+    n <- length(rank)
+    stopifnot(all(rank == 1:n))
     stopifnot(!is.unsorted(rev(size)))
+    stopifnot(length(r.large)==2)
+    log_rank=log10(rank)
+    log_size=log10(size)
     # 1. Fit powerlaw
     #
     # If no global alpha was specified, compute a sample-specific Pareto index alpha
@@ -62,12 +66,23 @@ fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(15, 100)) {
     # rightmost (and thus minimal) point, i.e. in the point
     #   p = (max(rank), min(size))
     k <- -1/a
-    r.max <- length(rank)
-    s.min <- size[r.max]
-    d <- log10(s.min) + log10(r.max)*(1/a)
+    d <- log_size[n] - k * log_rank[n]
+    #
+    # 3. Auto-detect the rank range corresponding to "large" lineages
+    #
+    # By default, the range includes all lineages up to (but not including)
+    # the first lineages whose size exceeds the powerlaw prediction, but at
+    # most the largest sqrt(n) lineages.
+    r.large.min <- if (is.na(r.large[1])) 1 else r.large[1]
+    r.large.max <- if (is.na(r.large[2])) {
+      log_size.pred <- k*log_rank + d
+      r.below.pred <- min(match(FALSE, log_size.pred > log_size) - 1, n, na.rm=T)
+      round(r.below.pred^0.5)
+    } else r.large[2]
+    if (r.large.min >= r.large.max) stop("r.large auto-detection failed")
     #
     # 2. Fit another powerlaw for large lineages (i.e. small ranks)
-    m.small <- lm(log10(size) ~ log10(rank), .SD[(r.large[1] <= rank) & (rank <= r.large[2])])
+    m.small <- lm(log10(size) ~ log10(rank), .SD[(r.large.min <= rank) & (rank <= r.large.max)])
     #
     # 3. Intersect the two powerlaws (lines in log-log-space) to find the knee (r,s),
     # i.e. the rank r from which onward the curve shows a powerlaw tail and the correspoinding
