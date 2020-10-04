@@ -967,7 +967,7 @@ function(input, output, session) {
             scale_color_manual(breaks=groups.all,
                                labels=c('obs. (data)', 'outside powerlaw tail (data)', 'obs. (model+seq.)',
                                         'total (model)', 'extant S-cells (model)', 'outside powerlaw tail (model+seq.)'),
-                               values=c('maroon', 'slateblue3', 'black', 'violet', 'cornflowerblue', 'darkcyan'),
+                               values=c('maroon', 'darkcyan', 'black', 'violet', 'cornflowerblue', 'darkcyan'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages")
