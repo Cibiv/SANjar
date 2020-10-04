@@ -13,17 +13,19 @@ rank_size <- function(subset) {
 }
 
 #' Align rank-size curves
-align_rank_size <- function(ranked) {
-  rank.max.all <- max(ranked$rank)
-  size.min.all <- min(ranked$size)
+align_rank_size <- function(ranked, rank.max=NULL, size.min=NULL) {
   r <- ranked[, {
-    rank.scale <- rank.max.all / (max(rank)-1)
-    size.scale <- size.min.all / min(size)
-    sm <- min(size)
-    list(rank, size,
-         rank.aligned=(rank-1) * rank.scale + 1,
-         size.aligned=size * size.scale,
-         rank.scale, size.scale)
+    rank.max.day <- if (is.null(rank.max)) max(rank) else rank.max
+    size.min.day <- if (is.null(size.min)) min(size) else size.min
+    .SD[, {
+      rank.scale <- rank.max.day / (max(rank)-1)
+      size.scale <- size.min.day / min(size)
+      sm <- min(size)
+      list(rank, size,
+           rank.aligned=(rank-1) * rank.scale + 1,
+           size.aligned=size * size.scale,
+           rank.scale, size.scale)
+    }, by=sid]
   }, by=day]
   setkey(r, sid, day, rank)
   r

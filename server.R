@@ -733,13 +733,13 @@ function(input, output, session) {
         # Fetch experimental data
         rank_size.experiment <- LT47.RANKSIZE[day==input$day_lsd]
         
-        # X coordinates to use when plotting curves
-        curves.xmax <- max(rank_size.experiment$rank, rank_size.model$rank, rank_size.model_pcr$rank)
-        curves.ymin <- min(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
-        curves.ymax <- max(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
-        xmax <- 10^(ceiling(10*log10(curves.xmax))/10)
-        ymin <- 10^(  floor(log10(curves.ymin)))
-        ymax <- 10^(ceiling(log10(curves.ymax)))
+        # Rank-size normalization and bounds to use when plotting curves
+        rank.max <- max(rank_size.experiment$rank, rank_size.model$rank, rank_size.model_pcr$rank)
+        size.min <- min(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
+        size.max <- max(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
+        xmax <- 10^(ceiling(10*log10(rank.max))/10)
+        ymin <- 10^(  floor(log10(size.min)))
+        ymax <- 10^(ceiling(log10(size.max)))
 
         # Legend overrides
         legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid", `powerlaw`="solid"),
@@ -759,21 +759,16 @@ function(input, output, session) {
         if (input$stochastic_lsd_incpowerlaw && (nrow(powerlaw) > 0)) {
             model_pcr.rm <- max(rank_size.model_pcr$rank)
             model_pcr.sm <- min(rank_size.model_pcr$size)
-            model_pcr.r.scale <- curves.xmax / model_pcr.rm
-            model_pcr.s.scale <- curves.ymin / model_pcr.sm
-            p <- p + geom_vline(data=powerlaw, aes(xintercept=zipf.rank.min*model_pcr.r.scale), col='darkcyan',
-                                linetype="dotted", size=LWD)
+            model_pcr.r.scale <- rank.max / model_pcr.rm
+            model_pcr.s.scale <- size.min / model_pcr.sm
+            p <- p + geom_vline(data=powerlaw, aes(xintercept=(zipf.rank.min-1)*model_pcr.r.scale + 1),
+                                col='darkcyan', linetype="dotted", size=LWD)
         }
         
         # Draw rank-size curves for the experimental lineage sizes in all replicates
         plot_rank_size <- function(rank_size, col, ...) {
-            rank_size[, {
-                # Plot a single curve, align the rightmost datapoints of all curves
-                rm <- max(rank)
-                sm <- min(size)
-                curve.aligned <- .SD[, list(sid, rank.shift=(curves.xmax*rank/rm),
-                                            size.norm=curves.ymin*size/sm)]
-                p <<- p + geom_line(data=curve.aligned, aes(x=rank.shift, y=size.norm, col=col), ...)
+            align_rank_size(rank_size, rank.max=rank.max, size.min=size.min)[, {
+                p <<- p + geom_line(data=copy(.SD), aes(x=rank.aligned, y=size.aligned, col=col), ...)
                 NULL
             }, by=sid]
         }
@@ -850,6 +845,9 @@ function(input, output, session) {
             sid, log_lsize=log10(lsize)
         )]
 
+        # Size normalization
+        log_lsize.min <- min(log_lsize.experiment$log_lsize, log_lsize.model_pcr$log_lsize, log_lsize.model$log_lsize)
+
         # Legend overrides
         legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
                                 size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
@@ -876,19 +874,19 @@ function(input, output, session) {
         if (nrow(log_lsize.experiment) > 0) {
             groups[length(groups)+1] <- "data"
             log_lsize.experiment[, {
-                p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize, col='data'),
+                p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize - min(log_lsize) + log_lsize.min, col='data'),
                                        geom="line", size=LWD, linetype="dashed")
                 NULL
             }, by=sid]
         }
         if (input$stochastic_lsd_incpuremodel && (nrow(log_lsize.model) > 0)) {
             groups[length(groups)+1] <- "model"
-            p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize, col='model'),
+            p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize - min(log_lsize) + log_lsize.min, col='model'),
                                   geom="line", size=LWD)
         }
         if (nrow(log_lsize.model_pcr) > 0) {
             groups[length(groups)+1] <- "model+seq."
-            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize, col='model+seq.'),
+            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize - min(log_lsize) + log_lsize.min, col='model+seq.'),
                                   geom="line", size=LWD2)
         }
 
