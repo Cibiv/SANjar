@@ -19,11 +19,12 @@ LT47.RANKSIZE <- META[ rank_size(LT47) ]
 message("*** Computing LT47.POWERLAW")
 # Compute powerlaw fits
 LT47.LIMIT.ALPHA.STARTDAY <- 11
-LT47.LIMIT.ALPHA <- fit_pareto(LT47[day >= LT47.LIMIT.ALPHA.STARTDAY, list(sid, day, size=lsize)])[
-  , signif(mean(alpha), digits=2) ]
+pareto <- fit_pareto(LT47[, list(sid, day, size=lsize)])
+LT47.LIMIT.ALPHA <- pareto[day >= LT47.LIMIT.ALPHA.STARTDAY, signif(mean(alpha), digits=2)]
 LT47.POWERLAW <- META[ fit_powerlaw_model(LT47.RANKSIZE, alpha=LT47.LIMIT.ALPHA) ]
 LT47.POWERLAW[, zipf.k := signif(zipf.k, digits=3) ]
 LT47.POWERLAW[, zipf.d := signif(zipf.d, digits=3) ]
+LT47.POWERLAW[, pareto.alpha.sid.day := pareto[LT47.POWERLAW, alpha] ]
 
 # Estimate PCR and sequencing parameters
 message("*** Estimating PCR and sequencing parameters")
