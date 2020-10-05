@@ -44,15 +44,15 @@ fit_pareto <- function(sizes) {
 #' 
 #' @param ranked  a `data.table`  with columns `sid` (sample id), `rank` (lineage size rank) and `size` (lineage size)
 #' @param alpha the Pareto index alpha to use. By default, alpha is estimated for each sample separately.
-#' @param r.large a two-component vector which specifies which range of ranks corresponds to "large" lineages 
+#' @param r.nonzipf a two-component vector which specifies which range of ranks corresponds to "non-Zipfian" lineages
 #' @return a `data.table` with columns `sid` (sample id), `alpha` (Pareto index), `k` (Zipf exponent),
 #'         `d` (Zipf intersect), `r` (smallest Zipf-goverened rank), `s` (largest Zipf-goverend lineage size).
-fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(NA_integer_, NA_integer_)) {
+fit_powerlaw_model <- function(ranked, alpha=NA, r.nonzipf=c(NA_integer_, NA_integer_)) {
   r <- ranked[, .SD[order(rank), {
     n <- length(rank)
     stopifnot(all(rank == 1:n))
     stopifnot(!is.unsorted(rev(size)))
-    stopifnot(length(r.large)==2)
+    stopifnot(length(r.nonzipf)==2)
     log_rank=log10(rank)
     log_size=log10(size)
     # 1. Fit powerlaw
@@ -73,26 +73,26 @@ fit_powerlaw_model <- function(ranked, alpha=NA, r.large=c(NA_integer_, NA_integ
     # By default, the range includes all lineages up to (but not including)
     # the first lineages whose size exceeds the powerlaw prediction, but at
     # most the largest sqrt(n) lineages.
-    r.large.min <- if (is.na(r.large[1])) 1 else r.large[1]
-    r.large.max <- if (is.na(r.large[2])) {
+    r.nonzipf.min <- if (is.na(r.nonzipf[1])) 1 else r.nonzipf[1]
+    r.nonzipf.max <- if (is.na(r.nonzipf[2])) {
       log_size.pred <- k*log_rank + d
       r.below.pred <- min(match(FALSE, log_size.pred > log_size) - 1, n, na.rm=T)
       round(r.below.pred^0.5)
-    } else r.large[2]
-    if (r.large.min >= r.large.max) stop("r.large auto-detection failed")
+    } else r.nonzipf[2]
+    if (r.nonzipf.min >= r.nonzipf.max) stop("r.nonzipf auto-detection failed")
     #
     # 2. Fit another powerlaw for large lineages (i.e. small ranks)
-    m.small <- lm(log10(size) ~ log10(rank), .SD[(r.large.min <= rank) & (rank <= r.large.max)])
+    m.nonzipf <- lm(log10(size) ~ log10(rank), .SD[(r.nonzipf.min <= rank) & (rank <= r.nonzipf.max)])
     #
     # 3. Intersect the two powerlaws (lines in log-log-space) to find the knee (r,s),
     # i.e. the rank r from which onward the curve shows a powerlaw tail and the correspoinding
     # size s.
-    r <- round(10^((d - m.small$coefficients[1]) / (m.small$coefficients[2] - k)))
+    r <- round(10^((d - m.nonzipf$coefficients[1]) / (m.nonzipf$coefficients[2] - k)))
     s <- size[r]
     #
     # 4. Return model fit
     list(pareto.alpha=a, zipf.k=k, zipf.d=d, zipf.rank.min=r, zipf.size.max=s,
-         large.k=m.small$coefficients[2], large.d=m.small$coefficients[1])
+         nonzipf.k=m.nonzipf$coefficients[2], nonzipf.d=m.nonzipf$coefficients[1])
   }], by=.(sid, day)]
   setkey(r, sid, day)
   r

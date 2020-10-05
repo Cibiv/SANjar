@@ -788,9 +788,9 @@ function(input, output, session) {
             groups[length(groups)+1] <- "powerlaw"
             p <- (p +
                 geom_segment(data=powerlaw, aes(x=1*model_pcr.r.scale,
-                                                y=(10^large.d)*model_pcr.s.scale,
+                                                y=(10^nonzipf.d)*model_pcr.s.scale,
                                                 xend=zipf.rank.min*model_pcr.r.scale,
-                                                yend=(10^large.d)*(zipf.rank.min^large.k)*model_pcr.s.scale,
+                                                yend=(10^nonzipf.d)*(zipf.rank.min^nonzipf.k)*model_pcr.s.scale,
                                                 col='powerlaw'),
                               linetype='solid', size=LWD2) +
                 geom_segment(data=powerlaw, aes(x=zipf.rank.min*model_pcr.r.scale,
