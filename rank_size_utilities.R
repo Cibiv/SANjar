@@ -102,14 +102,3 @@ fit_powerlaw_model <- function(ranked, alpha=NA, r.nonzipf=c(NA_integer_, NA_int
   setkey(r, sid, day)
   r
 }
-
-# Return true if x and y have the same value, including both being NA
-is.samevalue <- function(x, y) {
-  if (is.atomic(x) && is.atomic(y)) {
-    xv <- !is.na(x)
-    yv <- !is.na(y)
-    return(!((length(x) != length(y)) || any(xv != yv) || any(x[xv] != y[xv])))
-  }
-  else
-    stop("non-atomic values are currently unsupported")
-}

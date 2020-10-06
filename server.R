@@ -6,7 +6,7 @@ library(ggplot2)
 library(scales)
 library(shiny)
 library(rhandsontable)
-source("utilities.R")
+source("rank_size_utilities.R")
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
@@ -99,7 +99,18 @@ make_legend_key_twocolor <- function(legend, row, column, color1, color2, patter
     legend
 }
 
-# Return true if the two rates tables are identical
+#' Return true if x and y have the same value, including both being NA
+is.samevalue <- function(x, y) {
+    if (is.atomic(x) && is.atomic(y)) {
+        xv <- !is.na(x)
+        yv <- !is.na(y)
+        return(!((length(x) != length(y)) || any(xv != yv) || any(x[xv] != y[xv])))
+    }
+    else
+        stop("non-atomic values are currently unsupported")
+}
+
+#' Return true if the two rates tables are identical
 are.rates.identical <- function(r1, r2) {
     if (nrow(r1) != nrow(r2))
         return(FALSE)
