@@ -799,23 +799,26 @@ function(input, output, session) {
         }
         if (input$stochastic_lsd_incpowerlaw && (nrow(powerlaw) > 0)) {
             groups[length(groups)+1] <- "powerlaw"
+            stopifnot(nrow(powerlaw) == 1)
+            d <- with(powerlaw, {
+                transform <- function(r.scale, s.scale, f) { function(r) { f(r/r.scale)*s.scale } }
+                f.nonzipf <- transform(model_pcr.r.scale, model_pcr.s.scale,
+                                       function(r) { 10^nonzipf.d * r^nonzipf.k })
+                f.zipf <- transform(model_pcr.r.scale, model_pcr.s.scale,
+                                    function(r) { 10^zipf.d * r^zipf.k })
+                x <- c(1, zipf.rank.min*model_pcr.r.scale, zipf.rank.min*model_pcr.r.scale, model_pcr.rm*model_pcr.r.scale)
+                y <- c(f.nonzipf(x[1]), f.nonzipf(x[2]), f.zipf(x[3]), f.zipf(x[4]))
+                list(x=x, y=y)
+            })
             p <- (p +
-                geom_segment(data=powerlaw, aes(x=1*model_pcr.r.scale,
-                                                y=(10^nonzipf.d)*model_pcr.s.scale,
-                                                xend=zipf.rank.min*model_pcr.r.scale,
-                                                yend=(10^nonzipf.d)*(zipf.rank.min^nonzipf.k)*model_pcr.s.scale,
-                                                col='powerlaw'),
+                geom_segment(data=powerlaw, aes(x=d$x[1], y=d$y[1], xend=d$x[2], yend=d$y[2], col='powerlaw'),
                               linetype='solid', size=LWD2) +
-                geom_segment(data=powerlaw, aes(x=zipf.rank.min*model_pcr.r.scale,
-                                                y=(10^zipf.d)*(zipf.rank.min^zipf.k)*model_pcr.s.scale,
-                                                xend=model_pcr.rm*model_pcr.r.scale,
-                                                yend=(10^zipf.d)*(model_pcr.rm^zipf.k)*model_pcr.s.scale,
-                                                col='powerlaw'),
+                geom_segment(data=powerlaw, aes(x=d$x[3], y=d$y[3], xend=d$x[4], yend=d$y[4], col='powerlaw'),
                               linetype='solid', size=LWD2) +
-                annotate("text", x=powerlaw$zipf.rank.min*model_pcr.r.scale, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" powerlaw tail ->", size=5) +
-                annotate("text", x=powerlaw$zipf.rank.min*model_pcr.r.scale, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" <- roughly uniform size", size=5))
+                annotate("text", x=d$x[2], hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" <- roughly uniform size", size=5)) +
+                annotate("text", x=d$x[3], hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
+                         label=" powerlaw tail ->", size=5)
         }
         
         #  If nothing was plottet, return empty
