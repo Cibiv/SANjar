@@ -79,20 +79,25 @@ fit_powerlaw_model <- function(ranked, alpha=NA, r.nonzipf=c(NA_integer_, NA_int
       r.below.pred <- min(match(FALSE, log_size.pred > log_size) - 1, n, na.rm=T)
       round(r.below.pred^0.5)
     } else r.nonzipf[2]
-    if (r.nonzipf.min >= r.nonzipf.max) stop("r.nonzipf auto-detection failed")
+    r.nonzip.max <- max(r.nonzipf.min, r.nonzipf.max)
     #
     # 2. Fit another powerlaw for large lineages (i.e. small ranks)
-    m.nonzipf <- lm(log10(size) ~ log10(rank), .SD[(r.nonzipf.min <= rank) & (rank <= r.nonzipf.max)])
+    m.nonzipf <- if (r.nonzipf.min < r.nonzip.max) {
+      lm(log10(size) ~ log10(rank), .SD[(r.nonzipf.min <= rank) & (rank <= r.nonzipf.max)])
+    } else NULL
     #
     # 3. Intersect the two powerlaws (lines in log-log-space) to find the knee (r,s),
     # i.e. the rank r from which onward the curve shows a powerlaw tail and the correspoinding
     # size s.
-    r <- round(10^((d - m.nonzipf$coefficients[1]) / (m.nonzipf$coefficients[2] - k)))
+    r <- if (!is.null(m.nonzipf)) {
+      round(10^((d - m.nonzipf$coefficients[1]) / (m.nonzipf$coefficients[2] - k)))
+    } else 1
     s <- size[r]
     #
     # 4. Return model fit
     list(pareto.alpha=a, zipf.k=k, zipf.d=d, zipf.rank.min=r, zipf.size.max=s,
-         nonzipf.k=m.nonzipf$coefficients[2], nonzipf.d=m.nonzipf$coefficients[1])
+         nonzipf.k=if (!is.null(m.nonzipf)) m.nonzipf$coefficients[2] else NA_real_,
+         nonzipf.d=if (!is.null(m.nonzipf)) m.nonzipf$coefficients[1] else NA_real_)
   }], by=.(sid, day)]
   setkey(r, sid, day)
   r
