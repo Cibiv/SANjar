@@ -231,6 +231,16 @@ function(input, output, session) {
             rank_size(san_stochastic_results()[, list(sid, day, lsize=C)])
         } else NULL
     })
+    san_stochastic_powerlawfit <- reactive({
+        if (!is.null(san_stochastic_ranksize())) {
+            ranksize <- san_stochastic_ranksize()[size > 0]
+            pareto <- fit_pareto(ranksize)
+            limit.alpha <- pareto[day >= LT47.LIMIT.ALPHA.STARTDAY, signif(mean(alpha), digits=2)]
+            r <- fit_powerlaw_model(ranksize, alpha=limit.alpha)
+            r[, pareto.alpha.sid.day := pareto[r, alpha] ]
+            r
+        } else NULL
+    })
 
     san_stochastic_extinction_trajectories <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
@@ -407,8 +417,11 @@ function(input, output, session) {
     san_stochastic_powerlawfit_with_pcr <- reactive({
         if (!is.null(san_stochastic_ranksize_with_pcr_filtered())) {
             ranksize_pcr <- san_stochastic_ranksize_with_pcr_filtered()
-            limit.alpha <- fit_pareto(ranksize_pcr[day >= LT47.LIMIT.ALPHA.STARTDAY])[, mean(alpha)]
-            fit_powerlaw_model(ranksize_pcr, alpha=limit.alpha)
+            pareto <- fit_pareto(ranksize_pcr)
+            limit.alpha <- pareto[day >= LT47.LIMIT.ALPHA.STARTDAY, signif(mean(alpha), digits=2)]
+            r <- fit_powerlaw_model(ranksize_pcr, alpha=limit.alpha)
+            r[, pareto.alpha.sid.day := pareto[r, alpha] ]
+            r
         } else NULL
     })
 
@@ -971,6 +984,56 @@ function(input, output, session) {
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages")
+
+        # Finish plot
+        p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
+                                    ncol=2, byrow=FALSE))
+    })
+
+    output$pareto_alpha <- renderPlot({
+        message("Rendering Pareto-alpha plot ")
+        if (is.null(san_stochastic_results()))
+            return()
+
+        # Compute the alpha estimated from the simulation results
+        powerlaw_model <- if (input$pareto_alpha_incpuremodel && !is.null(san_stochastic_powerlawfit())) {
+            san_stochastic_powerlawfit()
+        } else data.table()
+
+        # Compute the alpha estimated from the simulation results
+        powerlaw_model_pcr <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
+            san_stochastic_powerlawfit_with_pcr()
+        } else data.table()
+
+        # Legend overrides
+        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
+                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
+        groups <- list()
+
+        # Draw plot
+        groups[length(groups)+1] <- "data"
+        p <- ggplot(data=NULL, aes(x=day, y=pareto.alpha.sid.day)) +
+            stat_summary(data=LT47.POWERLAW, aes(col='data'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+            stat_summary(data=LT47.POWERLAW, aes(col='data'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD)
+        if (nrow(powerlaw_model) > 0) {
+            groups[length(groups)+1] <- "model"
+            p <- p + geom_line(data=powerlaw_model, aes(col='model'), size=LWD2)
+        }
+        if (nrow(powerlaw_model_pcr) > 0) {
+            groups[length(groups)+1] <- "model+seq."
+            p <- p + geom_line(data=powerlaw_model_pcr, aes(col='model+seq.'), size=LWD2)
+        }
+
+        # Add legend
+        groups.all <- c('data', 'model', 'model+seq.')
+        groups <- groups.all[groups.all %in% groups]
+        p <- p +
+            scale_color_manual(breaks=groups.all,
+                               labels=c('data', 'model', 'model+seq.'),
+                               values=c('maroon', 'violet', 'black'),
+                               name=NULL) +
+            xlab("time [days]") +
+            ylab(expression("Pareto equality index (" ~ alpha ~ ")"))
 
         # Finish plot
         p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),

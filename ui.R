@@ -84,6 +84,12 @@ fluidPage(
                                              htmlOutput("phantom_threshold_auto_message")))
                  )
         ),
+        tabPanel("Pareto Equality Indices",
+                 fluidRow(column(width=6,
+                                 tags$label(class="control-label", "Estimated Pareto equalities indices over time"),
+                                 withSpinner(plotOutput("pareto_alpha", width="100%"), hide.ui=FALSE))),
+                 fluidRow(column(width=6,
+                                 checkboxInput("pareto_alpha_incpuremodel", label="show pure SAN model without PCR+Sequencing", value=FALSE, width="100%")))),
         tabPanel("S-cell extinction dynamics",
                  fluidRow(column(width=6,
                                  tags$label(class="control-label", "Lineage size on day 40 vs. S-cell extinction time"),
