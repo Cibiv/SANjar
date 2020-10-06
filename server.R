@@ -82,7 +82,7 @@ my_scale_log10_pretransformed <- function(scale, ...) scale(
     ...
 )
 
-# Hake for deterministic_celltypes to show the correct legend
+#' Hack for deterministic_celltypes to show the correct legend
 make_legend_key_twocolor <- function(legend, row, column, color1, color2, pattern="dashed") {
     idx <- grep(paste0("key-", row, "-", column*5 - 3), legend$grobs[[1]]$layout$name)
     for(i in 2:(length(idx)-2)) {
