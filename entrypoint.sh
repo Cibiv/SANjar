@@ -15,5 +15,12 @@ if ! test -e "/sanmodelexplorer/parametersets/load_by_default.override"; then
 	cp "/sanmodelexplorer/parametersets.dist/load_by_default.txt" "/sanmodelexplorer/parametersets/"
 fi
 
-# Run server
-exec $*
+# Run serve
+# NOTE: We use script here to run the server under a tty. This is a dirty hack that ensures
+# that progress message are output by progress_bar, which we then intercept and turn into
+# shiny progress updates.
+cmd=""
+for arg in "$@"; do
+	cmd="$cmd '$(printf "%s\n" "$arg" | sed "s/'/'\\\\''/g")'"
+done
+exec script -qefc "$cmd" /dev/null
