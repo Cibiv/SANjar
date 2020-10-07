@@ -1059,6 +1059,7 @@ function(input, output, session) {
 
     # S-cell extinction dynamics
     output$stochastic_scellext_vs_lineagesize <- renderPlot({
+        message("Rendering S-cell extinction time vs. lineage size plot")
         if (is.null(san_stochastic_extinction_trajectories()))
             return()
 
@@ -1081,6 +1082,7 @@ function(input, output, session) {
     })
 
     output$stochastic_scellext_vs_time <- renderPlot({
+        message("Rendering surving fraction of lineages plot")
         if (is.null(san_stochastic_extinction_trajectories()))
             return()
 
@@ -1103,6 +1105,7 @@ function(input, output, session) {
         HTML(stochastic_scellext_trajectory_label())
     })
     output$stochastic_scellext_trajectory <- renderPlot({
+        message("Rendering S-cell trajectory plot")
         if (is.null(san_stochastic_extinction_trajectories()))
             return()
 
