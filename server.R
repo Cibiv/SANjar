@@ -4,6 +4,9 @@ library(gwpcR)
 library(SANsimulatoR)
 library(ggplot2)
 library(scales)
+library(gganimate)
+library(av)           # mp4 output for gganimate
+library(transformr)   # required by gganimate
 library(shiny)
 library(rhandsontable)
 source("rank_size_utilities.R")
@@ -1141,4 +1144,61 @@ function(input, output, session) {
                                     ncol=2, byrow=FALSE),
                    fill=guide_none())
     })
+
+    output$stochastic_scellext_trajectory_video <- downloadHandler(filename="scell_extinction.mp4", contentType="video/mp4",
+        content=function(file) {
+            message("Rendering S-cell trajectory video to ", file)
+            if (is.null(san_stochastic_extinction_trajectories()))
+                return()
+
+            ext_traj <- san_stochastic_extinction_trajectories()
+            ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
+
+            p <- ggplot(data=ext_traj, aes(x=day)) +
+                geom_ribbon(aes(ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1), fill='mod.C'), alpha=0.2) +
+                geom_ribbon(aes(ymin=pmax(S-S.sd, 0.1), ymax=pmax(S+S.sd, 0.1), fill='mod.S'), alpha=0.15) +
+                geom_ribbon(aes(ymin=pmax(A-A.sd, 0.1), ymax=pmax(A+A.sd, 0.1), fill='mod.A'), alpha=0.15) +
+                geom_ribbon(aes(ymin=pmax(N-N.sd, 0.1), ymax=pmax(N+N.sd, 0.1), fill='mod.N'), alpha=0.15) +
+                geom_line(aes(y=pmax(C, 0.1), col='mod.C'), size=LWD2) +
+                geom_line(aes(y=pmax(S, 0.1), col='mod.S'), size=LWD) +
+                geom_line(aes(y=pmax(A, 0.1), col='mod.A'), size=LWD) +
+                geom_line(aes(y=pmax(N, 0.1), col='mod.N'), size=LWD) +
+                my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
+                annotation_logticks(sides="l") +
+                scale_color_manual(breaks=c('mod.C', 'mod.S', 'mod.A', 'mod.N'),
+                                   labels=c('total (model)', 'S (model)', 'A (model)', 'N (model)'),
+                                   values=c('black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4'),
+                                   name=NULL) +
+                xlab("time [days]") +
+                ylab("cells per lineage") +
+                guides(col=guide_legend(override.aes=list(linetype=c('solid', 'solid', 'solid', 'solid'),
+                                                          size=c(LWD2, LWD, LWD, LWD)),
+                                        ncol=2, byrow=FALSE),
+                       fill=guide_none()) +
+                transition_states(Text.S, transition_length=1, state_length=0, wrap=FALSE) +
+                ease_aes(y="linear")
+
+            progress.last <- 0
+            progress.pattern <- "^.*\\[(=*)(>-*)\\].*"
+            a <- withProgress(min=0, max=1, value=0, {
+                incProgress(0, message="preparing animation")
+                withCallingHandlers({
+                    animate(p, duration=Tfinal(), fps=as.numeric(input$stochastic_scellext_trajectory_video_fps), rewind=FALSE,
+                            width=9, height=6, units="in", res=200,
+                            renderer=av_renderer(codec="libx264", file=file))
+                }, message=function(m) {
+                    if (grepl(progress.pattern, m)) {
+                        progress.done <- nchar(gsub(progress.pattern, "\\1", m))
+                        progress.todo <-  nchar(gsub(progress.pattern, "\\2", m))
+                        progress <- progress.done / (progress.done + progress.todo)
+                        incProgress(progress - progress.last,
+                                    message=if(progress < 1) "rendering animation" else "encoding video")
+                        progress.last <<- progress
+                    }
+                })
+            })
+            NULL
+        }
+    )
+
 }

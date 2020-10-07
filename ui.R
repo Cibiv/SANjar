@@ -100,8 +100,12 @@ fluidPage(
                                  tags$label(class="control-label",  htmlOutput("stochastic_scellext_trajectory_label")),
                                  withSpinner(plotOutput("stochastic_scellext_trajectory", width="100%"), hide.ui=FALSE),
                                  sliderInput("day_scellext", "S-cell extinction time", width="100%",
-                                             min=0, max=0, step=1, value=0))),
-                 fluidRow(column(width=12,
+                                             min=0, max=0, step=1, value=0),
+                                 tags$span(
+                                     tags$div(selectInput("stochastic_scellext_trajectory_video_fps", choices=c(1, 6, 12, 24), label="FPS", width="100px"), style="display:inline-block; vertical-align: middle"),
+                                     tags$div(downloadButton("stochastic_scellext_trajectory_video", "Download video", width="100px"), style="display:inline-block; vertical-align: middle")
+                                 ))),
+                 fluidRow(column(width=6,
                                  bs_button("Show/hide simulation settings") %>%
                                      bs_attach_collapse("scellext_simulation_settings"))),
                  bs_collapse("scellext_simulation_settings",

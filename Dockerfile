@@ -2,6 +2,12 @@ FROM cibiv-shiny-base-r40:2020-10-02
 
 MAINTAINER Florian G. Pflug <florian.pflug@univie.ac.at>
 
+# Install gganimate and related packages
+# Should be moved to the base Dockerfile at some point
+RUN R -e "install.packages(c( \
+        'gganimate', 'gifski', 'av', 'transformr' \
+      ), repos='https://cloud.r-project.org/')"
+
 # Install R packages not on CRAN via devtools
 RUN R -e "library(devtools); install_github('Cibiv/gwpcR', ref='v0.9.10')"
 
