@@ -4,9 +4,10 @@ MAINTAINER Florian G. Pflug <florian.pflug@univie.ac.at>
 
 # Install gganimate and related packages
 # Should be moved to the base Dockerfile at some point
-RUN R -e "install.packages(c( \
+RUN apt-get update && apt-get install -y libudunits2-dev && \
+    R -e "install.packages(c( \
         'gganimate', 'gifski', 'av', 'transformr' \
-      ), repos='https://cloud.r-project.org/')"
+    ), repos='https://cloud.r-project.org/')"
 
 # Install R packages not on CRAN via devtools
 RUN R -e "library(devtools); install_github('Cibiv/gwpcR', ref='v0.9.10')"
