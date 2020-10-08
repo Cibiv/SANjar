@@ -2,6 +2,11 @@ FROM cibiv-shiny-base-r40:2020-10-07
 
 MAINTAINER Florian G. Pflug <florian.pflug@univie.ac.at>
 
+# Install shinyjs
+RUN R -e "install.packages(c( \
+        'shinyjs' \
+      ), repos='https://cloud.r-project.org/')"
+
 # Install R packages not on CRAN via devtools
 RUN R -e "library(devtools); install_github('Cibiv/gwpcR', ref='v0.9.10')"
 

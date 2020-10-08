@@ -1,6 +1,7 @@
 library(readr)
 library(shiny)
 library(rhandsontable)
+library(shinyjs)
 library(shinycssloaders)
 library(bsplus)
 
@@ -14,6 +15,9 @@ fluidPage(
     titlePanel(paste0("SAN Model Explorer",
                       if (!is.na(CONTAINER_REVISION)) paste0(" (", CONTAINER_REVISION ,")") else "")),
     
+    # Enable ShinyJS
+    useShinyjs(),
+
     # Tabs
     tabsetPanel(
         type="tabs",
@@ -103,7 +107,8 @@ fluidPage(
                                              min=0, max=0, step=1, value=0),
                                  tags$span(
                                      tags$div(selectInput("stochastic_scellext_trajectory_video_fps", choices=c(1, 6, 12, 24), label="FPS", width="100px"), style="display:inline-block; vertical-align: middle"),
-                                     tags$div(downloadButton("stochastic_scellext_trajectory_video", "Download video", width="100px"), style="display:inline-block; vertical-align: middle")
+                                     tags$div(actionButton("stochastic_scellext_trajectory_video_generate", "Generate video", width="150px"), style="display:inline-block; vertical-align: middle"),
+                                     tags$div(downloadButton("stochastic_scellext_trajectory_video_download", "Download video", width="150px"), style="display:inline-block; vertical-align: middle")
                                  ))),
                  fluidRow(column(width=6,
                                  bs_button("Show/hide simulation settings") %>%

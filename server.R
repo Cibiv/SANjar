@@ -8,6 +8,7 @@ library(gganimate)
 library(av)           # mp4 output for gganimate
 library(transformr)   # required by gganimate
 library(shiny)
+library(shinyjs)
 library(rhandsontable)
 source("rank_size_utilities.R")
 
@@ -1057,7 +1058,7 @@ function(input, output, session) {
                                     ncol=2, byrow=FALSE))
     })
 
-    # S-cell extinction dynamics
+    # S-cell extinction time vs. lineage size
     output$stochastic_scellext_vs_lineagesize <- renderPlot({
         message("Rendering S-cell extinction time vs. lineage size plot")
         if (is.null(san_stochastic_extinction_trajectories()))
@@ -1081,6 +1082,7 @@ function(input, output, session) {
             ylab(paste0("lineage size [cells]"))
     })
 
+    # S-cell-containing lineages
     output$stochastic_scellext_vs_time <- renderPlot({
         message("Rendering surving fraction of lineages plot")
         if (is.null(san_stochastic_extinction_trajectories()))
@@ -1100,32 +1102,9 @@ function(input, output, session) {
             ylab("lineages [%]")
     })
 
-    stochastic_scellext_trajectory_label <- reactiveVal()
-    output$stochastic_scellext_trajectory_label <- renderUI({
-        HTML(stochastic_scellext_trajectory_label())
-    })
-    output$stochastic_scellext_trajectory <- renderPlot({
-        message("Rendering S-cell trajectory plot")
-        if (is.null(san_stochastic_extinction_trajectories()))
-            return()
-
-        ext_traj <- san_stochastic_extinction_trajectories()
-        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
-
-        # Plot results
-        if (input$day_scellext <= Tfinal()) {
-            ext_traj_extday <- ext_traj[Text.S == input$day_scellext]
-            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction on day ", input$day_scellext))
-            if (nrow(ext_traj_extday) < 1)
-                stop("simulation produced no lineages with S-cell extinction on day ", input$day_scellext)
-        } else {
-            ext_traj_extday <- san_stochastic_extinction_trajectories()[is.infinite(Text.S)]
-            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction <b>after</b> day ", Tfinal()))
-            if (nrow(ext_traj_extday) < 1)
-                stop("simulation produced no lineages with S-cells surving past day ", Tfinal())
-        }
-
-        ggplot(data=ext_traj_extday, aes(x=day)) +
+    # S-cell extinction trajectories
+    stochastic_scellext_trajectory_plot <- function(data, ymax) {
+        ggplot(data=data, aes(x=day)) +
             geom_ribbon(aes(ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1), fill='mod.C'), alpha=0.2) +
             geom_ribbon(aes(ymin=pmax(S-S.sd, 0.1), ymax=pmax(S+S.sd, 0.1), fill='mod.S'), alpha=0.15) +
             geom_ribbon(aes(ymin=pmax(A-A.sd, 0.1), ymax=pmax(A+A.sd, 0.1), fill='mod.A'), alpha=0.15) +
@@ -1146,62 +1125,119 @@ function(input, output, session) {
                                                       size=c(LWD2, LWD, LWD, LWD)),
                                     ncol=2, byrow=FALSE),
                    fill=guide_none())
+    }
+    stochastic_scellext_trajectory_label <- reactiveVal()
+    output$stochastic_scellext_trajectory_label <- renderUI({
+        HTML(stochastic_scellext_trajectory_label())
+    })
+    output$stochastic_scellext_trajectory <- renderPlot({
+        message("Rendering S-cell trajectory plot")
+        if (is.null(san_stochastic_extinction_trajectories()))
+            return()
+
+        # Fetch average trajectories
+        ext_traj <- san_stochastic_extinction_trajectories()
+        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
+
+        # Restrict to those with the selected S-cell extinctin time
+        if (input$day_scellext <= Tfinal()) {
+            ext_traj_extday <- ext_traj[Text.S == input$day_scellext]
+            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction on day ", input$day_scellext))
+            if (nrow(ext_traj_extday) < 1)
+                stop("simulation produced no lineages with S-cell extinction on day ", input$day_scellext)
+        } else {
+            ext_traj_extday <- san_stochastic_extinction_trajectories()[is.infinite(Text.S)]
+            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction <b>after</b> day ", Tfinal()))
+            if (nrow(ext_traj_extday) < 1)
+                stop("simulation produced no lineages with S-cells surving past day ", Tfinal())
+        }
+
+        # Plot results
+        stochastic_scellext_trajectory_plot(ext_traj_extday, ymax)
     })
 
-    output$stochastic_scellext_trajectory_video <- downloadHandler(filename="scell_extinction.mp4", contentType="video/mp4",
-        content=function(file) {
-            message("Rendering S-cell trajectory video to ", file)
-            if (is.null(san_stochastic_extinction_trajectories()))
-                return()
+    # S-cell extinction trajectory video
+    stochastic_scellext_trajectory_video_file <- reactiveVal(NULL)
+    observeEvent({
+        # All inputs that the video depends on
+        input_rates()
+        input$s0
+        input$scellext_nlineages
+        input$stochastic_scellext_trajectory_video_fps
+    }, {
+        # Remove outdated video if the simulated trajectories change
+        if (!is.null(stochastic_scellext_trajectory_video_file())) {
+            file.remove(stochastic_scellext_trajectory_video_file())
+            stochastic_scellext_trajectory_video_file(NULL)
+        }
+    })
+    observeEvent(input$stochastic_scellext_trajectory_video_generate, {
+        # Generate video upon explicit request and only if its outdated (i.e. NULL)
+        if (is.null(san_stochastic_extinction_trajectories()) ||
+            !is.null(stochastic_scellext_trajectory_video_file()))
+            return()
+        file <- tempfile(fileext=".mp4")
+        onStop(function() { file.remove(file) })
+        message("Rendering S-cell trajectory video to temporary file ", file)
 
-            ext_traj <- san_stochastic_extinction_trajectories()
-            ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
+        # Fetch trajectories and setup plot
+        ext_traj <- san_stochastic_extinction_trajectories()
+        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
+        p <- stochastic_scellext_trajectory_plot(ext_traj, ymax) +
+            transition_states(Text.S, transition_length=1, state_length=0, wrap=FALSE) +
+            ease_aes(y="linear")
 
-            p <- ggplot(data=ext_traj, aes(x=day)) +
-                geom_ribbon(aes(ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1), fill='mod.C'), alpha=0.2) +
-                geom_ribbon(aes(ymin=pmax(S-S.sd, 0.1), ymax=pmax(S+S.sd, 0.1), fill='mod.S'), alpha=0.15) +
-                geom_ribbon(aes(ymin=pmax(A-A.sd, 0.1), ymax=pmax(A+A.sd, 0.1), fill='mod.A'), alpha=0.15) +
-                geom_ribbon(aes(ymin=pmax(N-N.sd, 0.1), ymax=pmax(N+N.sd, 0.1), fill='mod.N'), alpha=0.15) +
-                geom_line(aes(y=pmax(C, 0.1), col='mod.C'), size=LWD2) +
-                geom_line(aes(y=pmax(S, 0.1), col='mod.S'), size=LWD) +
-                geom_line(aes(y=pmax(A, 0.1), col='mod.A'), size=LWD) +
-                geom_line(aes(y=pmax(N, 0.1), col='mod.N'), size=LWD) +
-                my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
-                annotation_logticks(sides="l") +
-                scale_color_manual(breaks=c('mod.C', 'mod.S', 'mod.A', 'mod.N'),
-                                   labels=c('total (model)', 'S (model)', 'A (model)', 'N (model)'),
-                                   values=c('black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4'),
-                                   name=NULL) +
-                xlab("time [days]") +
-                ylab("cells per lineage") +
-                guides(col=guide_legend(override.aes=list(linetype=c('solid', 'solid', 'solid', 'solid'),
-                                                          size=c(LWD2, LWD, LWD, LWD)),
-                                        ncol=2, byrow=FALSE),
-                       fill=guide_none()) +
-                transition_states(Text.S, transition_length=1, state_length=0, wrap=FALSE) +
-                ease_aes(y="linear")
-
+        # Create animation
+        withProgress(min=0, max=1, value=0, {
             progress.last <- 0
             progress.pattern <- "^.*\\[(=*)(>-*)\\].*"
-            a <- withProgress(min=0, max=1, value=0, {
-                incProgress(0, message="preparing animation")
-                withCallingHandlers({
-                    animate(p, duration=Tfinal(), fps=as.numeric(input$stochastic_scellext_trajectory_video_fps), rewind=FALSE,
-                            width=9, height=6, units="in", res=200,
-                            renderer=av_renderer(codec="libx264", file=file))
-                }, message=function(m) {
-                    if (grepl(progress.pattern, m)) {
-                        progress.done <- nchar(gsub(progress.pattern, "\\1", m))
-                        progress.todo <-  nchar(gsub(progress.pattern, "\\2", m))
-                        progress <- progress.done / (progress.done + progress.todo)
-                        incProgress(progress - progress.last,
-                                    message=if(progress < 1) "rendering animation" else "encoding video")
-                        progress.last <<- progress
-                    }
-                })
+            incProgress(0, message="preparing animation")
+
+            # Render animation as h264-encoded mp4 file
+            withCallingHandlers({
+                animate(p, duration=Tfinal(), fps=as.numeric(input$stochastic_scellext_trajectory_video_fps), rewind=FALSE,
+                        width=9, height=6, units="in", res=200,
+                        renderer=av_renderer(codec="libx264", file=file))
+            }, message=function(m) {
+                # Update shiny progress indicator if gganimate::animate outputs a progress message
+                # Note: These messages are output only if r-lib/progres believes that we're in some
+                # kind of interactive session, which is the case if we're running in RStudio *or* if
+                # stderr is a tty.
+                if (grepl(progress.pattern, m)) {
+                    # Message looks like a progress message from gganimate::animate
+                    progress.done <- nchar(gsub(progress.pattern, "\\1", m))
+                    progress.todo <-  nchar(gsub(progress.pattern, "\\2", m))
+                    progress <- progress.done / (progress.done + progress.todo)
+                    incProgress(progress - progress.last,
+                                message=if(progress < 1) "rendering animation" else "encoding video")
+                    progress.last <<- progress
+                }
+            }, error=function(e) {
+                message("Removing incomplete file ", file)
+                file.remove(file)
+                file <<- NULL
             })
-            NULL
+        })
+
+        # Update video file
+        stochastic_scellext_trajectory_video_file(file)
+    })
+    observeEvent(stochastic_scellext_trajectory_video_file(), ignoreNULL=FALSE, {
+        # Toggle video generate/download button visibility depending on whether the file is up-to-date
+        if (is.null(stochastic_scellext_trajectory_video_file())) {
+            message("Enabling S-cell trajectory video generation")
+            show(id="stochastic_scellext_trajectory_video_generate")
+            hide(id="stochastic_scellext_trajectory_video_download")
+        } else {
+            message("Enabling S-cell trajectory video download")
+            hide(id="stochastic_scellext_trajectory_video_generate")
+            show(id="stochastic_scellext_trajectory_video_download")
         }
+    })
+    output$stochastic_scellext_trajectory_video_download <- downloadHandler(
+        filename="scell_extinction.mp4",
+        contentType="video/mp4",
+        content=function(file) { file.copy(stochastic_scellext_trajectory_video_file(), file) }
     )
 
 }
