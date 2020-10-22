@@ -941,6 +941,19 @@ function(input, output, session) {
                stop("unknown plot type ", input$stochastic_lsd_plottype))
     })
 
+    # Download LSD simulation results
+    output$stochastic_lsd_download <- downloadHandler(
+        filename="san_results.tab.gz",
+        contentType="text/tab-separated-values+gzip",
+        content=function(file) {
+            file_gz <- gzfile(file, open="w")
+            write_tsv(san_stochastic_results_with_pcr()[, list(day, lid, S, A, N, C, R)],
+                      path=file_gz,
+                      col_names=TRUE)
+            close(file_gz)
+        }
+    )
+
     # Number of surviving lineages
     output$stochastic_nlineages <- renderPlot({
         message("Rendering number-of-lineages plot ")

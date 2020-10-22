@@ -66,9 +66,11 @@ fluidPage(
                                              choices=c("log-rank vs. log-lineagesize",
                                                        "density of log-lineagesize"))),
                           column(width=6)),
-                 fluidRow(column(width=12,
+                 fluidRow(column(width=3,
                                  bs_button("Show/hide simulation settings") %>%
-                                     bs_attach_collapse("simulation_settings"))),
+                                     bs_attach_collapse("simulation_settings")),
+                          column(width=3,
+                                 downloadButton("stochastic_lsd_download", label="Download Simulation Results"))),
                  bs_collapse("simulation_settings",
                              fluidRow(column(width=3,
                                              selectInput("p_cutoff", "Discretization err.", width="100%",
