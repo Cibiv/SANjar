@@ -761,6 +761,10 @@ function(input, output, session) {
         # Fetch experimental data
         rank_size.experiment <- LT47.RANKSIZE[day==input$day_lsd]
         
+        # Abort if no data is available to plot
+        if (nrow(rank_size.model) + nrow(rank_size.model_pcr) + nrow(rank_size.experiment) == 0)
+            return(NULL)
+
         # Rank-size normalization and bounds to use when plotting curves
         rank.max <- max(rank_size.experiment$rank, rank_size.model$rank, rank_size.model_pcr$rank)
         size.min <- min(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
@@ -921,7 +925,7 @@ function(input, output, session) {
                                   geom="line", size=LWD2)
         }
 
-        #  If nothing was plottet, return empty
+        #  If nothing was plotted, return empty
         if (length(groups) == 0)
             return()
 
