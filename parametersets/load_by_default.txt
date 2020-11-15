@@ -1,1 +1,1 @@
-small lineages fit v17 similar to v16 but simplified some more
+day 0 3 6 11 40 v3.rd
