@@ -265,7 +265,7 @@ san_deterministic <- function(s0, rates, samples_per_day=1) {
     # Evaluate as far as the current set of rates is valid, output the state at the end of each day
     res <- san_deterministic_eval_fixedrates(
       x0=c(S=state$S, A=state$A, N=state$N),
-      times=tail(seq(from=0, to=r$Tmax - tstart, length.out=(r$Tmax - tstart + 1)*samples_per_day), n=-1),
+      times=tail(seq(from=0, to=r$Tmax - tstart, length.out=(r$Tmax - tstart)*samples_per_day + 1), n=-1),
       rates=r
     )
 
