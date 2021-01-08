@@ -237,7 +237,7 @@ san_deterministic <- function(s0, rates, samples_per_day=1) {
   if (!is.list(rates))
     stop("rates must be a list")
   if (!is.data.frame(rates) || (nrow(rates) == 0))
-    stop("rates must be a non-empty data.table (or.data.frame")
+    stop("rates must be a non-empty data.frame (or data.table)")
   rates <- as.data.table(rates)
   for (c in SAN.RATENAMES)
     if (!is.numeric(rates[[c]]) || !all(is.finite(rates[[c]])) || any(rates[[c]] < 0))
