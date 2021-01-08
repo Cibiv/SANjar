@@ -1,6 +1,6 @@
 library(deSolve)
 
-test_deterministic_san <- function(x0, tend, rates, expect.maxerr, expect.regime) {
+test_accuracy <- function(x0, tend, rates, expect.maxerr, expect.regime) {
   times <- seq(from=0, to=tend, by=0.01)
   
   # Solve numerically
@@ -31,22 +31,22 @@ test_deterministic_san <- function(x0, tend, rates, expect.maxerr, expect.regime
 }
 
 test_that('solution accuracy', {
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0.4),
-                         expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.general")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=1.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0.4),
-                         expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.general")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.6, r_A=0.3, r_N=0.8, r_D=0.4),
-                         expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.g_eq_mrD")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=1.5, r_R=0.6, r_A=0.3, r_N=0.8, r_D=1.4),
-                         expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.g_eq_mrD")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0),
-                         expect.maxerr=1e-6, expect.regime="s_noneq.a_inf")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=1.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0),
-                         expect.maxerr=1e-6, expect.regime="s_noneq.a_inf")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.4, r_N=0.8, r_D=0.3),
-                         expect.maxerr=1e-6, expect.regime="s_equil.a_fin")
-  test_deterministic_san(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.4, r_N=0.8, r_D=0),
-                         expect.maxerr=1e-6, expect.regime="s_equil.a_inf")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0.4),
+                expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.general")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=1.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0.4),
+                expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.general")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.6, r_A=0.3, r_N=0.8, r_D=0.4),
+                expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.g_eq_mrD")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=1.5, r_R=0.6, r_A=0.3, r_N=0.8, r_D=1.4),
+                expect.maxerr=1e-6, expect.regime="s_noneq.a_fin.g_eq_mrD")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0),
+                expect.maxerr=1e-6, expect.regime="s_noneq.a_inf")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=1.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0),
+                expect.maxerr=1e-6, expect.regime="s_noneq.a_inf")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.4, r_N=0.8, r_D=0.3),
+                expect.maxerr=1e-6, expect.regime="s_equil.a_fin")
+  test_accuracy(c(S=1,A=2,N=3), tend=100, rates=list(r_S=1, r_0=0.5, r_R=0.1, r_A=0.4, r_N=0.8, r_D=0),
+                expect.maxerr=1e-6, expect.regime="s_equil.a_inf")
 })
 
 test_grid <- function(rates, samples_per_day=1) {
