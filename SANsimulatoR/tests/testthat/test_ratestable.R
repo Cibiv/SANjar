@@ -1,0 +1,10 @@
+test_that('ratestable.fill.na', {
+  t <- data.table(Tmax=c(1,2,3), r_S=c(NA, 2, 3), r_0=c(0.1, NA, 0.3), r_R=c(0.01, 0.02, NA), r_A=c(10, 20, 30), r_N=c(NA, 200, NA), r_D=c(NA, NA, NA))
+  tp <- ratestable.fill.na(t)
+  expect_equal(tp$r_S, c(2, 2, 3))
+  expect_equal(tp$r_0, c(0.1, 0.3, 0.3))
+  expect_equal(tp$r_R, c(0.01, 0.02, 0))
+  expect_equal(tp$r_A, c(10, 20, 30))
+  expect_equal(tp$r_N, c(200, 200, 0))
+  expect_equal(tp$r_D, c(0, 0, 0))
+})

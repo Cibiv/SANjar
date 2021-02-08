@@ -2,6 +2,7 @@
 
 export(SAN.RATENAMES)
 export(find_time_step)
+export(ratestable.fill.na)
 export(san_deterministic)
 export(san_stochastic)
 import(data.table)
