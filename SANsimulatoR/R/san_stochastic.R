@@ -148,34 +148,6 @@ san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax
                               p_A=r$r_A*dt, p_N=r$r_N*dt, p_D=r$r_D*dt,
                               steps=rep(steps_per_sample, (r_Tmax - t)*samples_per_day))
     
-    # NOTE: THE COMMENTED CODE BELOW WAS WRONG, BUT KEPT AROUND BECAUSE THE IDEA MIGHT BE SALVAGED
-    #
-    # The problem is that the correction derived from a pure-birth model doesn't generalize correctly,
-    # because the corrected p_x is not linear in r_x, yet the discrete-time simulation code assumed
-    # that the number of cells affected by each type of event is independently bionomially distributed.
-    #
-    # Possible solution: First draw a binomial RV to decide how many cells are affected by an event
-    # at all. Then draw a multinomial RV to decide which events occur. 
-    #
-    # ORIGINAL COMMENT:
-    # We chose those probabilities such that the *expected* number of events matches the time-continuous
-    # process.
-    #
-    # In a simple one-type birth-only time-continuous process with birth rate r, the expected number
-    # of individuals at time t+dt is C(t) * e^(r*dt) if C(t) is the number of individuals at time t.
-    # The expected number of birth events per individual within a time interval dt is thus
-    #    e^(r*dt) - 1,
-    # and generalizing this, we use the probability
-    #    p_x=e^(r_x*dt) - 1
-    # for the per-individual occurence of an event of type x within a time interval of length dt.
-    #
-    # Note if |z| << 1, e^z is close to 1, and using `exp(z)-1` to evaluate e^z - 1 thus suffers
-    # from loss of precision. We thus use the function `expm1` which directly evaluates e^z - 1 to
-    # circumvent this cancellation issue.
-    #res <- san_timediscrete_c(state,
-    #                          p_S=expm1(r$r_S*dt), p_0=expm1(r$r_0*dt), p_R=expm1(r$r_R*dt),
-    #                          p_A=expm1(r$r_A*dt), p_N=expm1(r$r_N*dt), p_D=expm1(r$r_D*dt),
-    #                          steps=rep(steps_per_sample, (r$Tmax - t)*samples_per_day))
 
     # Append to results
     rows.res <- rbindlist(res)[, list(t=t+i/samples_per_day, dt=dt, lid=1L:L, S, A, N)]
