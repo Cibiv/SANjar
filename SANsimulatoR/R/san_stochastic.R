@@ -47,8 +47,10 @@ find_time_step <- function(rate, p_cutoff) {
 #'
 #' @param L the number of lineages
 #' @param s0 the initial number of S-cells *in each lineage* (default: `1`)
+#' @param previous the result of a previously san_stochastic invocation to be continued from
 #' @param rates a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
 #'              and `r_D`  and monotonically increasing values in the column `Tmax`.
+#' @param Tmax the stopping time (defaults to the largest Tmax in `rates`)
 #' @param samples_per_day the number of (equally spaced) times point per day at
 #'                        which to output the cell counts
 #' @param p_cutoff the maximal allowed probability of two sequential events
@@ -66,12 +68,17 @@ find_time_step <- function(rate, p_cutoff) {
 #' @import data.table
 #' @useDynLib SANsimulatoR, .registration = TRUE
 #' @export 
-san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
+san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax), samples_per_day=1, p_cutoff=1e-3) {
   # Check that all necessary parameters were specified correctly
-  if (!is.numeric(L) || (length(L) != 1) || (L %% 1 != 0))
-    stop("L must be a single non-negative integer")
-  if (!is.numeric(s0) || (length(s0) != 1) || !is.finite(s0) || (s0 %% 1 != 0) || (s0 < 0))
-    stop("s0 must be a single finite and non-negative integer")
+  if (is.null(previous)) {
+    if (!is.numeric(L) || (length(L) != 1) || !is.finite(L) || (L %% 1 != 0))
+      stop("L must be a single non-negative integer")
+    if (!is.numeric(s0) || (length(s0) != 1) || !is.finite(s0) || (s0 %% 1 != 0) || (s0 < 0))
+      stop("s0 must be a single finite and non-negative integer")
+  } else {
+    if (!is.data.table(previous) || any(colnames(previous) != c("t", "dt", "lid", "S", "A", "N")))
+      stop("previous must be the result of a previous san_stochastic call")
+  }
   if (!is.numeric(samples_per_day) || (length(samples_per_day) != 1) || !is.finite(samples_per_day) || (samples_per_day <= 0) || (samples_per_day %% 1 != 0))
     stop("samples_per_day must be be a single positive and finite integral value")
   if (!is.numeric(p_cutoff) || (length(p_cutoff) != 1) || !is.finite(p_cutoff) || (p_cutoff < 0) || (p_cutoff >= 1))
@@ -84,36 +91,53 @@ san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
       stop(paste(n, " must contain non-negative and finite numeric values"))
   if (is.unsorted(rates$Tmax))
     stop(paste("Tmax must contain non-negative and finite numeric values, and must increase monotonically"))
-  Tmax <- max(rates$Tmax)
+  if (Tmax > max(rates$Tmax))
+    stop("specified stopping time Tmax exceeds largest Tmax in rates table")
 
-  # Count vectors for the three cell types S, A, N
-  state <- data.table(t=0, dt=NA_real_, lid=1L:L, S=rep(as.integer(s0), L), A=rep(0L, L), N=rep(0L, L))
+  # Initialize state, either for t=0 or to continue from where we previously left off
+  if (is.null(previous)) {
+    # Start fresh
+    t <- 0
+    state <- list(S=rep(as.integer(s0), L), A=rep(0L, L), N=rep(0L, L))
+    rows <- list(data.table(t=0, dt=NA_real_, lid=1L:L, S=state$S, A=state$A, N=state$N))
+  } else {
+    # Continue from previous output
+    t <- previous[, max(t)]
+    t_ <- t
+    p <- previous[t == t_][order(lid)]
+    L <- p$lid[nrow(p)]
+    if (any(p$lid != 1:L))
+      stop("column lid of argument previous must contain LIDs 1 through L")
+    state <- p[, list(S, A, N)]
+    rows <- list(previous)
+  }
   
   # Simulate
   ri <- 0
   r <- list(Tmax=0)
-  rows <- list(state)
-  t <- 0
   while (t < Tmax) {
     # Switch to the next set of rates if necessary
     while (r$Tmax <= t) {
       # Next set of rates
       ri <- ri + 1
       r <- rates[ri]
-      
-      # Determine time step.
-      # First, determine maximum time step that makes the probability of more than one event
-      # per cell and time step less than p_cutoff
-      dt.max <- find_time_step(do.call(max, r[, ..SAN.RATENAMES]), p_cutoff=p_cutoff)
-      # Now find the smallest integral value steps_per_sample such that
-      #       1/(steps_per_sample*samples_per_day) <= dt.max
-      #   <=> steps_per_sample*samples_per_day >= 1/dt.max
-      #   <=> steps_per_sample >= 1/(samples_per_day*dt.max)
-      steps_per_sample = max(1, ceiling(1 / (samples_per_day*dt.max)))
-      # Finally, compute the actual time step dt
-      dt <- 1/(steps_per_sample*samples_per_day)
-      stopifnot(dt <= dt.max)
     }
+
+    # Determine stopping time for the current set of rates
+    r_Tmax <- min(r$Tmax, Tmax)
+
+    # Determine time step.
+    # First, determine maximum time step that makes the probability of more than one event
+    # per cell and time step less than p_cutoff
+    dt.max <- find_time_step(do.call(max, r[, ..SAN.RATENAMES]), p_cutoff=p_cutoff)
+    # Now find the smallest integral value steps_per_sample such that
+    #       1/(steps_per_sample*samples_per_day) <= dt.max
+    #   <=> steps_per_sample*samples_per_day >= 1/dt.max
+    #   <=> steps_per_sample >= 1/(samples_per_day*dt.max)
+    steps_per_sample = max(1, ceiling(1 / (samples_per_day*dt.max)))
+    # Finally, compute the actual time step dt
+    dt <- 1/(steps_per_sample*samples_per_day)
+    stopifnot(dt <= dt.max)
 
     # Simulate as far as the current set of rates is valid, output the state at the end of each day
     #
@@ -122,7 +146,7 @@ san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
     res <- san_timediscrete_c(state,
                               p_S=r$r_S*dt, p_0=r$r_0*dt, p_R=r$r_R*dt,
                               p_A=r$r_A*dt, p_N=r$r_N*dt, p_D=r$r_D*dt,
-                              steps=rep(steps_per_sample, (r$Tmax - t)*samples_per_day))
+                              steps=rep(steps_per_sample, (r_Tmax - t)*samples_per_day))
     
     # NOTE: THE COMMENTED CODE BELOW WAS WRONG, BUT KEPT AROUND BECAUSE THE IDEA MIGHT BE SALVAGED
     #
@@ -158,8 +182,8 @@ san_stochastic <- function(L, s0=1, rates, samples_per_day=1, p_cutoff=1e-3) {
     rows <- c(rows, list(rows.res))
     # Update state
     state <- res[[length(res)]]
-    stopifnot(rows.res[, max(t)] == r$Tmax)
-    t <- r$Tmax
+    stopifnot(rows.res[, max(t)] == r_Tmax)
+    t <- r_Tmax
   }
   
   # Return per-lineage cell-count table

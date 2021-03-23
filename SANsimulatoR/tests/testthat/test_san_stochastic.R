@@ -1,8 +1,14 @@
-test_stochastic_san <- function(M, s0, rates, p_errprob) {
+test_stochastic_san <- function(M, s0, rates, stopat=NULL, p_errprob) {
   # Simulate model and compute expectations using the deterministic model
   Tmax <- max(rates$Tmax)
-  r.exp <- san_deterministic(s0, rates)
-  r.sim <- san_stochastic(M, s0, rates, p_cutoff=1e-6)
+  r.exp <- san_deterministic(s0=s0, rates=rates)
+  if (is.null(stopat)) {
+    r.sim <- san_stochastic(L=M, s0=s0, rates, p_cutoff=1e-6)
+  } else {
+    r.sim <- san_stochastic(L=M, s0=s0, rates, Tmax=stopat[1], p_cutoff=1e-6)
+    for(s in stopat)
+      r.sim <- san_stochastic(rates=rates, previous=r.sim, Tmax=s, p_cutoff=1e-6)
+  }
 
   # Simple one-sample t-test
   t.test.onesample <- function(x0, x.avg, x.sd, nsample) {
@@ -29,7 +35,7 @@ test_stochastic_san <- function(M, s0, rates, p_errprob) {
     nsample=.N
   ), by="t"]
 
-  # Pperform a one-sample t-test to compare the sample mean to
+  # Perform a one-sample t-test to compare the sample mean to
   # the expected value
   p <- r[, list(
     S.pval=t.test.onesample(S.exp, S.sim.avg, S.sim.sd, nsample),
@@ -42,15 +48,30 @@ test_stochastic_san <- function(M, s0, rates, p_errprob) {
 }
 
 test_that('solution accuracy_equilibrium', {
-  test_stochastic_san(M=1e3, s=1e3, data.table(Tmax=10, r_S=1, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25), p_errprob=1e-3)
+  test_stochastic_san(M=1e3, s0=1e3, data.table(Tmax=10, r_S=1, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25), p_errprob=1e-3)
 })
 
 test_that('solution accuracy_growing', {
-  test_stochastic_san(M=1e3, s=1e3, data.table(Tmax=10, r_S=1.5, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25), p_errprob=1e-3)
+  test_stochastic_san(M=1e3, s0=1e3, data.table(Tmax=10, r_S=1.5, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25), p_errprob=1e-3)
 })
 
 test_that('solution accuracy_shrinking', {
-  test_stochastic_san(M=1e3, s=1e3, data.table(Tmax=10, r_S=0.5, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25), p_errprob=1e-3)
+  test_stochastic_san(M=1e3, s0=1e3, data.table(Tmax=10, r_S=0.5, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25), p_errprob=1e-3)
+})
+
+test_that('solution accuracy_equilibrium (multistep)', {
+  test_stochastic_san(M=1e3, s0=1e3, data.table(Tmax=10, r_S=1, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25),
+                      stopat=c(5, 10), p_errprob=1e-3)
+})
+
+test_that('solution accuracy_growing (multistep)', {
+  test_stochastic_san(M=1e3, s0=1e3, data.table(Tmax=10, r_S=1.5, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25),
+                      stopat=c(5, 10), p_errprob=1e-3)
+})
+
+test_that('solution accuracy_shrinking (multistep)', {
+  test_stochastic_san(M=1e3, s0=1e3, data.table(Tmax=10, r_S=0.5, r_0=0.2, r_R=0.3, r_A=0.5, r_N=0.15, r_D=0.25),
+                      stopat=c(5, 10), p_errprob=1e-3)
 })
 
 test_grid <- function(rates, samples_per_day=1) {
@@ -59,6 +80,17 @@ test_grid <- function(rates, samples_per_day=1) {
 
   # Check that integral times occur at the expected places in the solution grid
   expect_equal(san$t[1 + (0:tmax)*samples_per_day], 0:tmax)
+}
+
+test_grid_multistep <- function(rates, stopat, samples_per_day=1) {
+  L <- 2
+  tmax <- max(stopat)
+  san <- san_stochastic(L=L, rates=rates, Tmax=stopat[1], samples_per_day=samples_per_day)
+  for(s in stopat[2:length(stopat)])
+    san <- san_stochastic(previous=san, rates=rates, Tmax=s, samples_per_day=samples_per_day)
+  
+  # Check that integral times occur at the expected places in the solution grid
+  expect_equal(san$t[1 + (0:tmax)*samples_per_day*L], 0:tmax, each=L)
 }
 
 test_that('solution grid', {
@@ -77,4 +109,22 @@ test_that('solution grid', {
   test_grid(rates=rates, samples_per_day=3)
   test_grid(rates=rates, samples_per_day=4)
   test_grid(rates=rates, samples_per_day=5)
+})
+
+test_that('solution grid (multistep)', {
+  rates <- rbind(
+    data.frame(Tmax=1, r_S=1, r_0=0.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0.4),
+    data.frame(Tmax=3, r_S=1, r_0=1.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0.4),
+    data.frame(Tmax=6, r_S=1, r_0=0.5, r_R=0.6, r_A=0.3, r_N=0.8, r_D=0.4),
+    data.frame(Tmax=10, r_S=1, r_0=1.5, r_R=0.6, r_A=0.3, r_N=0.8, r_D=1.4),
+    data.frame(Tmax=15, r_S=1, r_0=0.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0),
+    data.frame(Tmax=21, r_S=1, r_0=1.5, r_R=0.1, r_A=0.3, r_N=0.8, r_D=0),
+    data.frame(Tmax=28, r_S=1, r_0=0.5, r_R=0.1, r_A=0.4, r_N=0.8, r_D=0.3),
+    data.frame(Tmax=36, r_S=1, r_0=0.5, r_R=0.1, r_A=0.4, r_N=0.8, r_D=0)
+  )
+  test_grid_multistep(rates=rates, stopat=c(3, 4, 5, 7, 10, 21, 35), samples_per_day=1)
+  test_grid_multistep(rates=rates, stopat=c(3, 4, 5, 7, 10, 21, 35), samples_per_day=2)
+  test_grid_multistep(rates=rates, stopat=c(3, 4, 5, 7, 10, 21, 35), samples_per_day=3)
+  test_grid_multistep(rates=rates, stopat=c(3, 4, 5, 7, 10, 21, 35), samples_per_day=4)
+  test_grid_multistep(rates=rates, stopat=c(3, 4, 5, 7, 10, 21, 35), samples_per_day=5)
 })
