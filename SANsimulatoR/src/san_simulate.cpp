@@ -34,9 +34,9 @@ typedef dqrng::xoroshiro128plus RNGType;
 
 inline int san_draw_delta(RNGType& rng, int n, double p) {
 #if (SAN_DELTA_DISTRIBUTION == binomial)
-  return (p > 0.0) ? boost::random::binomial_distribution<int>(n, p)(rng) : 0.0;
+  return ((p > 0.0) && (n > 0)) ? boost::random::binomial_distribution<int>(n, p)(rng) : 0.0;
 #elif (SAN_DELTA_DISTRIBUTION == poisson)
-  return (p > 0.0) ? boost::random::poisson_distribution<int>(n * p)(rng) : 0.0;
+  return ((p > 0.0) && (n > 0)) ? boost::random::poisson_distribution<int>(n * p)(rng) : 0.0;
 #else
   #error "Set SAN_DELTA_DISTRIBUTION to either binomial or poisson"
 #endif
