@@ -4,7 +4,15 @@
 \alias{san_stochastic}
 \title{Simulate the stochastic SAN model}
 \usage{
-san_stochastic(L, s0 = 1, rates, samples_per_day = 1, p_cutoff = 0.001)
+san_stochastic(
+  L = NA,
+  s0 = 1,
+  rates,
+  previous = NULL,
+  Tmax = max(rates$Tmax),
+  samples_per_day = 1,
+  p_cutoff = 0.001
+)
 }
 \arguments{
 \item{L}{the number of lineages}
@@ -14,6 +22,10 @@ san_stochastic(L, s0 = 1, rates, samples_per_day = 1, p_cutoff = 0.001)
 \item{rates}{a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
 and `r_D`  and monotonically increasing values in the column `Tmax`.}
 
+\item{previous}{the result of a previously san_stochastic invocation to be continued from}
+
+\item{Tmax}{the stopping time (defaults to the largest Tmax in `rates`)}
+
 \item{samples_per_day}{the number of (equally spaced) times point per day at
 which to output the cell counts}
 
@@ -22,8 +34,7 @@ within one time step}
 }
 \value{
 a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
-        at each day from \eqn{t=0} to \eqn{t=T}, where \eqn{T} is the value of
-        `Tmax` in the last row of the rates table. For each day, the table contains
+        at each day from \eqn{t=0} to \eqn{t=Tmax}.For each day, the table contains
         `samples_per_day` rows with equally spaced evaluation times within that day. 
 
 While the model as defined above is time-continuous, this function simulates

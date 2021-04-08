@@ -19,7 +19,12 @@ san_deterministic_eval_fixedrates(x0, times, rates, eps = 0.001)
 a matrix with columns `t`, `S`, `A`, `N` and one row per time point
 }
 \description{
-Evaluates the anyltical solution at the specified times, starting
+If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
+be used which allows rates to vary over time, provides a user-friedly API,
+and checks parameters for validity.
+}
+\details{
+Evaluates the analytical solution at the specified times, starting
 from the cell counts specified in `x0` at time `t=0`, and uses
 the rates specified via `r`.
 }

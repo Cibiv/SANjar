@@ -144,33 +144,17 @@ SAN.DETERMINISTIC.SOLUTION.REGIMES.DIFF <- lapply(SAN.DETERMINISTIC.SOLUTION.REG
 })
 }
 
-#' Evaluates the analytical solution of the deterministic SAN model
+#' Returns the name of the parameter regime of the given rates for the deterministic SAN model
 #' 
-#' Evaluates the anyltical solution at the specified times, starting
-#' from the cell counts specified in `x0` at time `t=0`, and uses
-#' the rates specified via `r`.
+#' If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
+#' be used which provides a user-friedly API and checks parameters for validity
 #' 
-#' @param x0 initial cell counts at time `t=0`
-#' @param times the times to evaluate the solution at
 #' @param rates a names list with non-negative finite values for r_S, r_0 r_R, r_A, r_N, r_D.
-#' @param eps the epsilon value used when determining the parameter regime
-#' @return a matrix with columns `t`, `S`, `A`, `N` and one row per time point
-san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
-  # Check parameters
-  if (!is.numeric(x0) || (length(x0) != 3) || !all(is.finite(x0)) || !all(x0 >= 0) ||
-      is.null(names(x0)) || !all(names(x0) == c("S", "A", "N")))
-    stop("initial values in x0 must be numeric, non-negative, finite, and named 'S', 'A', 'N'")
-  if (!is.numeric(times) || !all(is.finite(times)) || !all(times >= 0))
-    stop("evaluation times must be numeric, non-negative and finite")
-  if (!is.list(rates))
-    stop("rates must be a named list")
-  for(n in SAN.RATENAMES) {
-    if (!is.numeric(rates[[n]]) || (length(rates[[n]]) != 1) || !is.finite(rates[[n]]) || (rates[[n]] < 0))
-      stop(paste("rate ", n, " must be a a single non-negative and finite numeric value"))
-  }
-
-  # Select regime
-  regime <- with(rates, {
+#' @return a character vector containing the name
+#' 
+#' @export
+san_deterministic_regime <- function(rates, eps=1e-3) {
+  with(rates, {
     gamma <- eval(SAN.DETERMINISTIC.SOLUTIONS.ABBREVIATIONS$gamma)
     theta <- eval(SAN.DETERMINISTIC.SOLUTIONS.ABBREVIATIONS$theta)
     if ((abs(gamma) >= eps) && (abs(r_D) >= eps) && (abs(theta) >= eps))
@@ -189,6 +173,42 @@ san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
       # S-cell equilibrium, infinite A-cell lifetime
       "s_equil.a_inf"
   })
+}
+
+#' Returns the analytic expression for the specified parameter regime of the deterministic SAN model 
+#' 
+#' If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
+#' be used which allows rates to vary over time, provides a user-friedly API,
+#' and checks parameters for validity.
+#' 
+#' @param regime the parameter regime as returned by `san_deterministic_regime`
+#' @return an expression in the variables `s0`, `a0`, `n0`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`, `r_D` and `times`.
+#'
+#' @export
+san_deterministic_expression <- function(regime) {
+  return(SAN.DETERMINISTIC.SOLUTION.REGIMES[[regime]])
+}
+
+#' Evaluates the analytical solution of the deterministic SAN model
+#' 
+#' If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
+#' be used which allows rates to vary over time, provides a user-friedly API,
+#' and checks parameters for validity.
+#' 
+#' Evaluates the analytical solution at the specified times, starting
+#' from the cell counts specified in `x0` at time `t=0`, and uses
+#' the rates specified via `r`.
+#' 
+#' @param x0 initial cell counts at time `t=0`
+#' @param times the times to evaluate the solution at
+#' @param rates a names list with non-negative finite values for r_S, r_0 r_R, r_A, r_N, r_D.
+#' @param eps the epsilon value used when determining the parameter regime
+#' @return a matrix with columns `t`, `S`, `A`, `N` and one row per time point
+#' 
+#' @export
+san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
+  # Select regime
+  regime <- san_deterministic_regime(rates, eps)
 
   # Evaluate solution and return results.
   expr <- SAN.DETERMINISTIC.SOLUTION.REGIMES[[regime]]
@@ -218,20 +238,28 @@ san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
 #' are in effect between the previous row's `Tmax` and the row's own `Tmax`.
 #' 
 #' @param s0 the initial number of S-cells
+#' @param previous the result of a previously san_stochastic invocation to be continued from
 #' @param rates a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
 #'              and `r_D`  and monotonically increasing values in the column `Tmax`.
+#' @param Tmax the stopping time (defaults to the largest Tmax in `rates`)
 #' @param samples_per_day the number of (equally spaced) times point per day at
 #'                        which to output the cell counts
 #'                        
 #' @return a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
-#'         at each day from \eqn{t=0} to \eqn{t=T}, where \eqn{T} is the value of
-#'         `Tmax` in the last row of the rates table. For each day, the table contains
+#'         at each day from \eqn{t=0} to \eqn{t=Tmax}. For each day, the table contains
 #'         `samples_per_day` rows with equally spaced evaluation times within that day. 
 #'
 #' @import data.table
 #' @export
-san_deterministic <- function(s0, rates, samples_per_day=1) {
+san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax), samples_per_day=1) {
   # Check that all necessary parameters were specified correctly
+  if (is.null(previous)) {
+    if (!is.numeric(s0) || (length(s0) != 1) || !is.finite(s0) || (s0 %% 1 != 0) || (s0 < 0))
+      stop("s0 must be a single finite and non-negative integer")
+  } else {
+    if (!is.data.table(previous) || any(colnames(previous) != c("t", "S", "A", "N", "regime")))
+      stop("previous must be the result of a previous san_stochastic call")
+  }
   if (!is.numeric(samples_per_day) || (length(samples_per_day) != 1) || !is.finite(samples_per_day) || (samples_per_day <= 0) || (samples_per_day %% 1 != 0))
     stop("samples_per_day must be be a single positive and finite integral value")
   if (!is.list(rates))
@@ -241,19 +269,32 @@ san_deterministic <- function(s0, rates, samples_per_day=1) {
   rates <- as.data.table(rates)
   for (c in SAN.RATENAMES)
     if (!is.numeric(rates[[c]]) || !all(is.finite(rates[[c]])) || any(rates[[c]] < 0))
-      stop(paste(n, " must contain non-negative and finite numeric values"))
+      stop(paste(c, " must contain non-negative and finite numeric values"))
   if (is.unsorted(rates$Tmax))
     stop(paste("Tmax must contain non-negative and finite numeric values, and must increase monotonically"))
-  Tmax <- max(rates$Tmax)
-  
+  if (Tmax > max(rates$Tmax))
+    stop("specified stopping time Tmax exceeds largest Tmax in rates table")
+
   # Count vectors for the three cell types S, A, N
   state <- data.table(t=0, S=s0, A=0, N=0, regime=NA_character_)
+
+  # Initialize state, either for t=0 or to continue from where we previously left off
+  if (is.null(previous)) {
+    # Start fresh
+    tstart <- 0
+    state <- list(S=s0, A=0, N=0)
+    rows <- list(data.table(t=0, S=state$S, A=state$A, N=state$N, regime=NA_character_))
+  } else {
+    # Continue from previous output
+    tstart <- previous[, max(t)]
+    p <- previous[t == tstart]
+    state <- p[, list(S, A, N)]
+    rows <- list(previous)
+  }
   
   # Simulate
   ri <- 0
   r <- list(Tmax=0)
-  rows <- list(state)
-  tstart <- 0
   while (tstart < Tmax) {
     # Switch to the next set of rates if necessary
     while (r$Tmax <= tstart) {
@@ -262,20 +303,23 @@ san_deterministic <- function(s0, rates, samples_per_day=1) {
       r <- rates[ri]
     }
     
+    # Determine stopping time for the current set of rates
+    r_Tmax <- min(r$Tmax, Tmax)
+    
     # Evaluate as far as the current set of rates is valid, output the state at the end of each day
     res <- san_deterministic_eval_fixedrates(
-      x0=c(S=state$S, A=state$A, N=state$N),
-      times=tail(seq(from=0, to=r$Tmax - tstart, length.out=(r$Tmax - tstart)*samples_per_day + 1), n=-1),
+      x0=unlist(state),
+      times=tail(seq(from=0, to=r_Tmax - tstart, length.out=(r_Tmax - tstart)*samples_per_day + 1), n=-1),
       rates=r
     )
 
     # Append to results
-    rows.res <- as.data.table(res)[, list(t=tstart+t, S, A, N, regime=attr(res, "regime"))]
+    rows.res <- as.data.table(res)[, list(t=tstart+t, S, A, N, regime=attr(res, "regime")) ]
     rows <- c(rows, list(rows.res))
     # Update state
-    state <- rows.res[nrow(res),]
-    stopifnot(rows.res[, max(t)] == r$Tmax)
-    tstart <- r$Tmax
+    state <- res[[length(res)]]
+    stopifnot(rows.res[, max(t)] == r_Tmax)
+    tstart <- r_Tmax
   }
   
   # Return per-lineage cell-count table

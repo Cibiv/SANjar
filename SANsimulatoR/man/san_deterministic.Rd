@@ -4,7 +4,13 @@
 \alias{san_deterministic}
 \title{Computes the number of S-, A- and N-cells under the deterministic SAN model}
 \usage{
-san_deterministic(s0, rates, samples_per_day = 1)
+san_deterministic(
+  s0 = NULL,
+  rates,
+  previous = NULL,
+  Tmax = max(rates$Tmax),
+  samples_per_day = 1
+)
 }
 \arguments{
 \item{s0}{the initial number of S-cells}
@@ -12,13 +18,16 @@ san_deterministic(s0, rates, samples_per_day = 1)
 \item{rates}{a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
 and `r_D`  and monotonically increasing values in the column `Tmax`.}
 
+\item{previous}{the result of a previously san_stochastic invocation to be continued from}
+
+\item{Tmax}{the stopping time (defaults to the largest Tmax in `rates`)}
+
 \item{samples_per_day}{the number of (equally spaced) times point per day at
 which to output the cell counts}
 }
 \value{
 a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
-        at each day from \eqn{t=0} to \eqn{t=T}, where \eqn{T} is the value of
-        `Tmax` in the last row of the rates table. For each day, the table contains
+        at each day from \eqn{t=0} to \eqn{t=Tmax}. For each day, the table contains
         `samples_per_day` rows with equally spaced evaluation times within that day.
 }
 \description{

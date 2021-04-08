@@ -57,8 +57,7 @@ find_time_step <- function(rate, p_cutoff) {
 #'                 within one time step
 #'                        
 #' @return a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
-#'         at each day from \eqn{t=0} to \eqn{t=T}, where \eqn{T} is the value of
-#'         `Tmax` in the last row of the rates table. For each day, the table contains
+#'         at each day from \eqn{t=0} to \eqn{t=Tmax}.For each day, the table contains
 #'         `samples_per_day` rows with equally spaced evaluation times within that day. 
 #'
 #' While the model as defined above is time-continuous, this function simulates
