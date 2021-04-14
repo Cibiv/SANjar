@@ -275,20 +275,17 @@ san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax
   if (Tmax > max(rates$Tmax))
     stop("specified stopping time Tmax exceeds largest Tmax in rates table")
 
-  # Count vectors for the three cell types S, A, N
-  state <- data.table(t=0, S=s0, A=0, N=0, regime=NA_character_)
-
   # Initialize state, either for t=0 or to continue from where we previously left off
   if (is.null(previous)) {
     # Start fresh
     tstart <- 0
-    state <- list(S=s0, A=0, N=0)
-    rows <- list(data.table(t=0, S=state$S, A=state$A, N=state$N, regime=NA_character_))
+    state <- c(S=s0, A=0, N=0)
+    rows <- list(data.table(t=0, S=state["S"], A=state["A"], N=state["N"], regime=NA_character_))
   } else {
     # Continue from previous output
     tstart <- previous[, max(t)]
     p <- previous[t == tstart]
-    state <- p[, list(S, A, N)]
+    state <- c(S=p$S, A=p$A, N=p$N)
     rows <- list(previous)
   }
   
@@ -308,7 +305,7 @@ san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax
     
     # Evaluate as far as the current set of rates is valid, output the state at the end of each day
     res <- san_deterministic_eval_fixedrates(
-      x0=unlist(state),
+      x0=state,
       times=tail(seq(from=0, to=r_Tmax - tstart, length.out=(r_Tmax - tstart)*samples_per_day + 1), n=-1),
       rates=r
     )
@@ -317,7 +314,7 @@ san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax
     rows.res <- as.data.table(res)[, list(t=tstart+t, S, A, N, regime=attr(res, "regime")) ]
     rows <- c(rows, list(rows.res))
     # Update state
-    state <- res[[length(res)]]
+    state <- res[nrow(res),]
     stopifnot(rows.res[, max(t)] == r_Tmax)
     tstart <- r_Tmax
   }
