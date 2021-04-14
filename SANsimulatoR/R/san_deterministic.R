@@ -78,7 +78,7 @@ SAN.DETERMINISTIC.SOLUTION.REGIMES <- list(
       v.c.a0 =make_vector(0,            0,                             omega),
       v.c.n0 =make_vector(0,            0,                                 1)
     )),
-  
+
   s_noneq.a_fin.g_eq_mrD=make_san_solution(
     (  (s0 * v.g.s0 + a0 * v.g.a0)               %*% exp(gamma * times)
      + (s0 * v.tg.s0)                            %*% (times * exp(gamma * times))
@@ -91,7 +91,7 @@ SAN.DETERMINISTIC.SOLUTION.REGIMES <- list(
       v.c.a0 =make_vector(0,            0,                             omega),
       v.c.n0 =make_vector(0,            0,                                 1)
     )),
-  
+
   s_noneq.a_inf=make_san_solution(
     (  (s0 * v.g.s0)                             %*% exp(gamma * times)
      + (s0 * v.t.s0 + a0 * v.t.a0)               %*% times
@@ -104,7 +104,7 @@ SAN.DETERMINISTIC.SOLUTION.REGIMES <- list(
       v.c.a0=make_vector(0,            1,                                  0),
       v.c.n0=make_vector(0,            0,                                  1)
     )),
-  
+
   s_equil.a_fin=make_san_solution(
     (  (s0 * v.rD.s0 + a0 * v.rD.a0)             %*% exp(-r_D * times)
      + (s0 * v.t.s0)                             %*% times
@@ -117,7 +117,7 @@ SAN.DETERMINISTIC.SOLUTION.REGIMES <- list(
       v.c.a0 =make_vector(0,            0,                             omega),
       v.c.n0 =make_vector(0,            0,                                 1)
     )),
-  
+
   s_equil.a_inf=make_san_solution(
     (  (s0 * v.t2.s0)                            %*% (times^2)
      + (s0 * v.t.s0 + a0 * v.t.a0)               %*% times
@@ -145,13 +145,13 @@ SAN.DETERMINISTIC.SOLUTION.REGIMES.DIFF <- lapply(SAN.DETERMINISTIC.SOLUTION.REG
 }
 
 #' Returns the name of the parameter regime of the given rates for the deterministic SAN model
-#' 
+#'
 #' If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
 #' be used which provides a user-friedly API and checks parameters for validity
-#' 
+#'
 #' @param rates a names list with non-negative finite values for r_S, r_0 r_R, r_A, r_N, r_D.
 #' @return a character vector containing the name
-#' 
+#'
 #' @export
 san_deterministic_regime <- function(rates, eps=1e-3) {
   with(rates, {
@@ -175,12 +175,12 @@ san_deterministic_regime <- function(rates, eps=1e-3) {
   })
 }
 
-#' Returns the analytic expression for the specified parameter regime of the deterministic SAN model 
-#' 
+#' Returns the analytic expression for the specified parameter regime of the deterministic SAN model
+#'
 #' If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
 #' be used which allows rates to vary over time, provides a user-friedly API,
 #' and checks parameters for validity.
-#' 
+#'
 #' @param regime the parameter regime as returned by `san_deterministic_regime`
 #' @return an expression in the variables `s0`, `a0`, `n0`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`, `r_D` and `times`.
 #'
@@ -190,21 +190,21 @@ san_deterministic_expression <- function(regime) {
 }
 
 #' Evaluates the analytical solution of the deterministic SAN model
-#' 
+#'
 #' If the goal is simply to evaluate the deterministic SAN model, `san_deterministic` should
 #' be used which allows rates to vary over time, provides a user-friedly API,
 #' and checks parameters for validity.
-#' 
+#'
 #' Evaluates the analytical solution at the specified times, starting
 #' from the cell counts specified in `x0` at time `t=0`, and uses
 #' the rates specified via `r`.
-#' 
+#'
 #' @param x0 initial cell counts at time `t=0`
 #' @param times the times to evaluate the solution at
 #' @param rates a names list with non-negative finite values for r_S, r_0 r_R, r_A, r_N, r_D.
 #' @param eps the epsilon value used when determining the parameter regime
 #' @return a matrix with columns `t`, `S`, `A`, `N` and one row per time point
-#' 
+#'
 #' @export
 san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
   # Select regime
@@ -223,7 +223,7 @@ san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
 }
 
 #' Computes the number of S-, A- and N-cells under the deterministic SAN model
-#' 
+#'
 #' The deterministic SAN model describes the *average* behavior of the stochastic
 #' SAN model, and is the defined by the ODE
 #' \deqn{S' = (r_S - r_0 - r_R - r_A)\cdot S}{S' = (r_S - r_0 - r_R - r_A) * S}
@@ -231,12 +231,12 @@ san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
 #' \deqn{N' = r_R\cdot S + r_N\cdot A}{N' = r_R * S + r_N * A}
 #' This function computes \eqn{(S(t), A(t), N(t))} from \eqn{t=0} onwards
 #' given \eqn{s_0=S(0)} and time-dependent but piece-wise constant rates
-#' \eqn{r_S}, \eqn{r_0}, \eqn{r_R}, \eqn{r_A}, \eqn{r_N}, \eqn{r_D}. 
-#' 
+#' \eqn{r_S}, \eqn{r_0}, \eqn{r_R}, \eqn{r_A}, \eqn{r_N}, \eqn{r_D}.
+#'
 #' The picewise constant rates are specified through the table `rates` with
 #' columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`. The parameters in each row
 #' are in effect between the previous row's `Tmax` and the row's own `Tmax`.
-#' 
+#'
 #' @param s0 the initial number of S-cells
 #' @param previous the result of a previously san_stochastic invocation to be continued from
 #' @param rates a `data.table` with columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`
@@ -244,10 +244,10 @@ san_deterministic_eval_fixedrates <- function(x0, times, rates, eps=1e-3) {
 #' @param Tmax the stopping time (defaults to the largest Tmax in `rates`)
 #' @param samples_per_day the number of (equally spaced) times point per day at
 #'                        which to output the cell counts
-#'                        
+#'
 #' @return a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
 #'         at each day from \eqn{t=0} to \eqn{t=Tmax}. For each day, the table contains
-#'         `samples_per_day` rows with equally spaced evaluation times within that day. 
+#'         `samples_per_day` rows with equally spaced evaluation times within that day.
 #'
 #' @import data.table
 #' @export
@@ -288,7 +288,7 @@ san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax
     state <- c(S=p$S, A=p$A, N=p$N)
     rows <- list(previous)
   }
-  
+
   # Simulate
   ri <- 0
   r <- list(Tmax=0)
@@ -299,10 +299,10 @@ san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax
       ri <- ri + 1
       r <- rates[ri]
     }
-    
+
     # Determine stopping time for the current set of rates
     r_Tmax <- min(r$Tmax, Tmax)
-    
+
     # Evaluate as far as the current set of rates is valid, output the state at the end of each day
     res <- san_deterministic_eval_fixedrates(
       x0=state,
@@ -318,7 +318,7 @@ san_deterministic <- function(s0=NULL, rates, previous=NULL, Tmax=max(rates$Tmax
     stopifnot(rows.res[, max(t)] == r_Tmax)
     tstart <- r_Tmax
   }
-  
+
   # Return per-lineage cell-count table
   return(rbindlist(rows))
 }

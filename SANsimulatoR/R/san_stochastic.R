@@ -1,9 +1,9 @@
 #' Determine a sensible time step
-#' 
+#'
 #' The time step is chosen to reduce the probability of two sequential
 #' events (i.e. where the second event affects a cell created or destroyed
 #' by the first event) below \code{p_cutoff}
-#' 
+#'
 #' @param rate the maximal rate in the model
 #' @param p_cutoff the maximal allowed probability of two sequential events
 #'                 within one time step
@@ -65,11 +65,11 @@ san_stochastic_simulate_fixedrates <- function(x0, rates, steps, dt) {
 }
 
 #' Simulate the stochastic SAN model
-#' 
+#'
 #' The stochastic SAN model describes the stochastic behavior of lineages
 #' consisting of S, A and N-cells which can undergo the following conversions
 #' in a memoryless fashion, making the model a Markov process.
-#' 
+#'
 #' | event                         | rate      |
 #' | \eqn{S \to S S}{S -> S S}     | \eqn{r_S} |
 #' | \eqn{S \to \emptyset}{S -> 0} | \eqn{r_0} |
@@ -77,17 +77,17 @@ san_stochastic_simulate_fixedrates <- function(x0, rates, steps, dt) {
 #' | \eqn{S \to A}{S -> A}         | \eqn{r_A} |
 #' | \eqn{A \to A N}{S -> A N}     | \eqn{r_N} |
 #' | \eqn{A \to N}{A -> N}         | \eqn{r_D} |
-#' 
+#'
 #' The picewise constant rates are specified through the table `rates` with
 #' columns `Tmax`, `r_S`, `r_0`, `r_R`, `r_A`, `r_N`. The parameters in each row
 #' are in effect between the previous row's `Tmax` and the row's own `Tmax`.
-#' 
+#'
 #' *Note*: Typically, the deterministic SAN model is applied to a system consisting
 #' of \eqn{s_0} (\eqn{\gg 1}) initial S-cells. The point of the *stochastic* SAN model
 #' is typically to simulate the lineages arising from these cells separately, meaning
 #' that in the stochastic model, one will typically set \eqn{s_0} to 1, and \eqn{L} to
 #' the initial number of S-cells. In a way, it is thus the parameter \eqn{L} here that
-#' corresponds to the parameter \eqn{s_0} of the deterministic model. 
+#' corresponds to the parameter \eqn{s_0} of the deterministic model.
 #'
 #' @param L the number of lineages
 #' @param s0 the initial number of S-cells *in each lineage* (default: `1`)
@@ -99,10 +99,10 @@ san_stochastic_simulate_fixedrates <- function(x0, rates, steps, dt) {
 #'                        which to output the cell counts
 #' @param p_cutoff the maximal allowed probability of two sequential events
 #'                 within one time step
-#'                        
+#'
 #' @return a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
 #'         at each day from \eqn{t=0} to \eqn{t=Tmax}.For each day, the table contains
-#'         `samples_per_day` rows with equally spaced evaluation times within that day. 
+#'         `samples_per_day` rows with equally spaced evaluation times within that day.
 #'
 #' While the model as defined above is time-continuous, this function simulates
 #' the model in discrete time steps. The parameter `p_cutoff` controls the accuracy
@@ -110,7 +110,7 @@ san_stochastic_simulate_fixedrates <- function(x0, rates, steps, dt) {
 #'
 #' @import data.table
 #' @useDynLib SANsimulatoR, .registration = TRUE
-#' @export 
+#' @export
 san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax), samples_per_day=1, p_cutoff=1e-3) {
   # Check that all necessary parameters were specified correctly
   if (is.null(previous)) {
@@ -154,7 +154,7 @@ san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax
     state <- p[, list(S, A, N)]
     rows <- list(previous)
   }
-  
+
   # Simulate
   ri <- 0
   r <- list(Tmax=0)
@@ -186,7 +186,7 @@ san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax
     state <- res[[length(res)]]
     t <- r_Tmax
   }
-  
+
   # Return per-lineage cell-count table
   return(rbindlist(rows))
 }

@@ -35,7 +35,7 @@ within one time step}
 \value{
 a `data.table` with columns `t`, `S`, `A`, `N` containing the cell counts
         at each day from \eqn{t=0} to \eqn{t=Tmax}.For each day, the table contains
-        `samples_per_day` rows with equally spaced evaluation times within that day. 
+        `samples_per_day` rows with equally spaced evaluation times within that day.
 
 While the model as defined above is time-continuous, this function simulates
 the model in discrete time steps. The parameter `p_cutoff` controls the accuracy
