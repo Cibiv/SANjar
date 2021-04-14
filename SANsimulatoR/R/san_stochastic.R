@@ -20,6 +20,50 @@ find_time_step <- function(rate, p_cutoff) {
   (-lambertWm1((p_cutoff-1)/exp(1))-1) / rate
 }
 
+#' Determine a suitable step size and steps vector for `san_stochastic_simulate_fixedrates`
+#'
+#' @param rates a names list with non-negative finite values for r_S, r_0 r_R, r_A, r_N, r_D.
+#' @param days number of days to simulate
+#' @param samples_per_day number of samples per day to output
+#' @param p_cutoff the maximal allowed probability of two sequential events within one time step
+#' @return a list containing the step size `dt` and a vector `steps` of number of step between each sample
+#'
+#' @export
+san_stochastic_steps <- function(rates, days, samples_per_day=1, p_cutoff=1e-3) {
+  # Determine time step.
+  # First, determine maximum time step that makes the probability of more than one event
+  # per cell and time step less than p_cutoff
+  dt.max <- find_time_step(do.call(max, rates[SAN.RATENAMES]), p_cutoff=p_cutoff)
+  # Now find the smallest integral value steps_per_sample such that
+  #       1/(steps_per_sample*samples_per_day) <= dt.max
+  #   <=> steps_per_sample*samples_per_day >= 1/dt.max
+  #   <=> steps_per_sample >= 1/(samples_per_day*dt.max)
+  steps_per_sample = max(1, ceiling(1 / (samples_per_day*dt.max)))
+  # Then compute the actual time step dt
+  dt <- 1/(steps_per_sample*samples_per_day)
+  # And generate vector of number of steps between samples
+  steps <- rep(steps_per_sample, days*samples_per_day)
+
+  return(list(steps=steps, dt=dt))
+}
+
+#' Simulate the stochastic SAN model for with constant rates in discrete steps
+#'
+#' See @seealso san_stochastic for details about the stochastic SAN model
+#'
+#' @param x0 a list containing vectors `S`, `A`, `N` with the initial cell-counts per lineage
+#' @param rates a names list with non-negative finite values for r_S, r_0 r_R, r_A, r_N, r_D.
+#' @param steps a vector listing the number of steps between each sample
+#' @param dt the time each step corresponds to
+#'
+#' @export
+san_stochastic_simulate_fixedrates <- function(x0, rates, steps, dt) {
+  san_timediscrete_c(x0,
+                     p_S=rates$r_S*dt, p_0=rates$r_0*dt, p_R=rates$r_R*dt,
+                     p_A=rates$r_A*dt, p_N=rates$r_N*dt, p_D=rates$r_D*dt,
+                     steps=steps)
+}
+
 #' Simulate the stochastic SAN model
 #' 
 #' The stochastic SAN model describes the stochastic behavior of lineages
@@ -125,35 +169,21 @@ san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax
     # Determine stopping time for the current set of rates
     r_Tmax <- min(r$Tmax, Tmax)
 
-    # Determine time step.
-    # First, determine maximum time step that makes the probability of more than one event
-    # per cell and time step less than p_cutoff
-    dt.max <- find_time_step(do.call(max, r[, ..SAN.RATENAMES]), p_cutoff=p_cutoff)
-    # Now find the smallest integral value steps_per_sample such that
-    #       1/(steps_per_sample*samples_per_day) <= dt.max
-    #   <=> steps_per_sample*samples_per_day >= 1/dt.max
-    #   <=> steps_per_sample >= 1/(samples_per_day*dt.max)
-    steps_per_sample = max(1, ceiling(1 / (samples_per_day*dt.max)))
-    # Finally, compute the actual time step dt
-    dt <- 1/(steps_per_sample*samples_per_day)
-    stopifnot(dt <= dt.max)
-
     # Simulate as far as the current set of rates is valid, output the state at the end of each day
     #
     # discrete_san_c simulates the system in discrete time steps, and requires the probabilities
     # p_S, p_0, ... of an event to occurs within one time step to be specified.
+    s <- san_stochastic_steps(as.list(r), days=r_Tmax - t, samples_per_day=samples_per_day, p_cutoff=p_cutoff)
     res <- san_timediscrete_c(state,
-                              p_S=r$r_S*dt, p_0=r$r_0*dt, p_R=r$r_R*dt,
-                              p_A=r$r_A*dt, p_N=r$r_N*dt, p_D=r$r_D*dt,
-                              steps=rep(steps_per_sample, (r_Tmax - t)*samples_per_day))
-    
+                              p_S=r$r_S*s$dt, p_0=r$r_0*s$dt, p_R=r$r_R*s$dt,
+                              p_A=r$r_A*s$dt, p_N=r$r_N*s$dt, p_D=r$r_D*s$dt,
+                              steps=s$steps)
 
     # Append to results
     rows.res <- rbindlist(res)[, list(t=t+i/samples_per_day, dt=dt, lid=1L:L, S, A, N)]
     rows <- c(rows, list(rows.res))
     # Update state
     state <- res[[length(res)]]
-    stopifnot(rows.res[, max(t)] == r_Tmax)
     t <- r_Tmax
   }
   
