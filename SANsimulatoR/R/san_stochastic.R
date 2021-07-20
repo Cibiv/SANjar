@@ -180,7 +180,7 @@ san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax
                               steps=s$steps)
 
     # Append to results
-    rows.res <- rbindlist(res)[, list(t=t+i/samples_per_day, dt=dt, lid=1L:L, S, A, N)]
+    rows.res <- rbindlist(res)[, list(t=t+i/samples_per_day, dt=s$dt, lid=1L:L, S, A, N)]
     rows <- c(rows, list(rows.res))
     # Update state
     state <- res[[length(res)]]
