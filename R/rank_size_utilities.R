@@ -1,33 +1,14 @@
-library(data.table)
-
 #' Compute rank-size table from a table with observed lineage sizes
 #' 
-#' @param subset a `data.table` containing columns `sid` (sample id) and `lsize` (lineage size)
-#' @return a `data.table`  with columns `sid` (sample id), `rank` (lineage size rank) and `size` (lineage size)
-rank_size <- function(subset) {
-  r <- subset[, {
-    .SD[order(lsize, decreasing=TRUE)][, list(rank=1:.N, size=lsize)]
-  }, by=.(sid, day)]
-  setkey(r, sid, day, rank)
-  r
-}
-
-#' Align rank-size curves
-align_rank_size <- function(ranked, rank.max=NULL, size.min=NULL) {
-  r <- ranked[, {
-    rank.max.day <- if (is.null(rank.max)) max(rank) else rank.max
-    size.min.day <- if (is.null(size.min)) min(size) else size.min
-    .SD[, {
-      rank.scale <- rank.max.day / (max(rank)-1)
-      size.scale <- size.min.day / min(size)
-      sm <- min(size)
-      list(rank, size,
-           rank.aligned=(rank-1) * rank.scale + 1,
-           size.aligned=size * size.scale,
-           rank.scale, size.scale)
-    }, by=sid]
-  }, by=day]
-  setkey(r, sid, day, rank)
+#' @param data a `data.table`
+#' @param key the name(s) of a set of columns of `data` which define the group within which sizes are ranked
+#' @param size the name of a column of `data` containing the lineage sizes
+#' @return a `data.table` containing the grouping columns, `rank` (lineage size rank) and `size` (lineage size)
+rank_size <- function(data, key=c("day", "sid")) {
+  r <- data[, {
+    .SD[order(size, decreasing=TRUE)][, list(rank=1:.N, size)]
+  }, by=key]
+  setkeyv(r, c(key, "rank"))
   r
 }
 

@@ -1,4 +1,4 @@
-Package: SANsimulatoR
+Package: SANjar
 Type: Package
 Title: Simulates the deterministic and stochastic versions of the SAN model
 Version: 1.0
@@ -11,7 +11,8 @@ License: AGPL (>=3)
 Imports:
         methods,
         data.table,
-        lamW
+        lamW,
+        gwpcR
 Suggests:
         compare,
         testthat
@@ -20,3 +21,4 @@ LinkingTo:
         BH,
         dqrng
 RoxygenNote: 7.1.1
+LazyData: true

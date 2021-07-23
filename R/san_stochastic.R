@@ -109,7 +109,7 @@ san_stochastic_simulate_fixedrates <- function(x0, rates, steps, dt) {
 #' of this discretization, see \code{\link[=func]{find_time_step()}}
 #'
 #' @import data.table
-#' @useDynLib SANsimulatoR, .registration = TRUE
+#' @useDynLib SANjar, .registration = TRUE
 #' @export
 san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax), samples_per_day=1, p_cutoff=1e-3) {
   # Check that all necessary parameters were specified correctly

@@ -1,22 +1,15 @@
 library(data.table)
-library(Hmisc)
-library(gwpcR)
-library(SANsimulatoR)
+library(shiny)
+library(rhandsontable)
 library(ggplot2)
 library(scales)
-library(gganimate)
-library(av)           # mp4 output for gganimate
-library(transformr)   # required by gganimate
-library(shiny)
-library(shinyjs)
-library(rhandsontable)
-source("rank_size_utilities.R")
+
+# Parameters:
+#  LOCATION.PARAMETERSETS
+#  DEFAULT.PARAMETERSET
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
-
-# Location to store the parameter sets in
-LOCATION.PARAMETERSETS <- "parametersets"
 
 # Line width
 LWD <- 0.8
@@ -33,11 +26,6 @@ RATES.EMPTY <- as.data.table({
 theme_set(theme_grey(base_size = 20))
 theme_update(legend.position="bottom",
              legend.key.width = unit(15,"mm"))
-
-# Load data
-load("data/organoidsizes.rd")
-load("data/celltypes.rd")
-load("data/lt47.processed.rd")
 
 # Return a list of saved parameter sets
 parametersets.list <- function() {
@@ -62,17 +50,6 @@ parameterset.fillempty <- function(value) {
     }
     return(value)
 }
-
-# Default parameter set is specified by parametersets/load_by_default.txt
-DEFAULT.PARAMETERSET <- local({
-    link_fn <- file.path(LOCATION.PARAMETERSETS, "load_by_default.txt")
-    default_name <- trimws(readChar(link_fn, file.info(link_fn)$size))
-    default <- parameterset.fullpath(default_name)
-    if (file.exists(default))
-        default_name
-    else
-        character(0)
-})
 
 # Better ggplot2 logscale
 my_scale_log10 <- function(scale, ...) scale(
@@ -127,6 +104,29 @@ are.rates.identical <- function(r1, r2) {
 
 # Server logic
 function(input, output, session) {
+    dataset_lineagesize_expr <- reactive({
+        if ("cells" %in% names(DATASET$lineagesizes))
+            expression("cells")
+        else if ("reads" %in% names(DATASET$lineagesizes))
+            expression("reads")
+        else
+            stop("lineagesizes must contain column 'cells' or 'reads'")
+    })
+    
+    dataset_nlineages <- reactive({
+        DATASET$lineagesizes[, list(nlineages=as.integer(sum(eval(dataset_lineagesize_expr()) > 0)))
+                             , keyby=.(day, sid)]
+    })
+    
+    dataset_ranksize <- reactive({
+        rank_size(DATASET$lineagesizes[, list(sid, day, size=eval(dataset_lineagesize_expr()))])
+    })
+    
+    dataset_logsize <- reactive({
+        DATASET$lineagesizes[, list(sid, log_size=log10(eval(dataset_lineagesize_expr())))
+                             , keyby=.(day, sid)]
+    })
+
     # The rates table set programmatically
     # It seems that even though output$rates consumes output_rates(), updating
     # output_rates doesn't always trigger an update of the on-screen table. We
@@ -200,9 +200,9 @@ function(input, output, session) {
     observeEvent(Tfinal(), {
         # Update day_lsd
         sel <- input$day_lsd
-        choices <- sort(unique(c(LT47$day, Tfinal())))
+        choices <- sort(unique(c(DATASET$lineagesizes$day, Tfinal())))
         if ((length(sel) < 1) || is.na(sel) || (sel == ""))
-            sel <- max(LT47$day, na.rm=TRUE)
+            sel <- max(DATASET$lineagesizes$day, na.rm=TRUE)
         if (!(sel %in% choices))
             sel <- choices[length(choices)]
         updateSelectInput(session, "day_lsd", choices=choices, selected=sel)
@@ -219,7 +219,7 @@ function(input, output, session) {
                 S, A, N,
                 C=S+A+N
             )]
-            setkey(r, sid, day)
+            setkey(r, day, sid)
             r
         } else NULL
     })
@@ -237,48 +237,13 @@ function(input, output, session) {
                 dt, lid, S, A, N,
                 C=S+A+N
             )]
-            setkey(r, sid, day, lid)
+            setkey(r, day, sid, lid)
             r
         } else NULL
     })
     san_stochastic_ranksize <- reactive({
         if (!is.null(san_stochastic_results())) {
-            rank_size(san_stochastic_results()[, list(sid, day, lsize=C)])
-        } else NULL
-    })
-    san_stochastic_powerlawfit <- reactive({
-        if (!is.null(san_stochastic_ranksize())) {
-            ranksize <- san_stochastic_ranksize()[size > 0]
-            pareto <- fit_pareto(ranksize)
-            limit.alpha <- pareto[day >= LT47.LIMIT.ALPHA.STARTDAY, signif(mean(alpha), digits=2)]
-            r <- fit_powerlaw_model(ranksize, alpha=limit.alpha)
-            r[, pareto.alpha.sid.day := pareto[r, alpha] ]
-            r
-        } else NULL
-    })
-
-    san_stochastic_extinction_trajectories <- reactive({
-        # Do nothing if the rates table is empty or s0 is zero
-        if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
-            L=as.integer(input$scellext_nlineages)
-            message("Simulating ", L, " lineages under the SAN model to obtain average extinction trajectories")
-            r <- san_stochastic(L=L, rates=input_rates(), samples_per_day=1,
-                                p_cutoff=as.numeric(input$p_cutoff))[, list(
-                day=t,
-                dt, lid, S, A, N,
-                C=S+A+N
-            )]
-            r[, Text.S := {
-                t.is.ext.S <- day[S == 0]
-                if (length(t.is.ext.S) > 0) min(t.is.ext.S) else Inf
-            }, by=lid]
-            r[, list(
-                C=mean(C), C.sd=sd(C),
-                S=mean(S), S.sd=sd(S),
-                A=mean(A), A.sd=sd(A),
-                N=mean(N), N.sd=sd(N),
-                nlineages=.N
-            ), keyby=.(day, Text.S)]
+            rank_size(san_stochastic_results()[, list(sid, day, size=C)])
         } else NULL
     })
 
@@ -388,8 +353,6 @@ function(input, output, session) {
     san_stochastic_results_with_pcr <- reactive({
         if (!is.null(san_stochastic_results())) {
             message("Simulating PCR and sequencing")
-            # Days for which experimental data is available
-            days <- LT47[, list(), keyby=day]
             # Compute total number of cells in each simulated sample
             total_sizes <- san_stochastic_results()[, list(C.total=sum(as.numeric(C))), keyby=day]
             # Simulate read counts under the gwpcR PCR model
@@ -402,21 +365,22 @@ function(input, output, session) {
                 [library_size_manual_or_auto(), on="day"]
                 [, list(
                     dt, lid, S, A, N,
-                    R=if (C > 0)
-                        rgwpcrpois(.N, efficiency=pcr_efficiency[1], threshold=0,
-                                   molecules=C, lambda0=as.numeric(C)*library_size[1]/C.total[1])
-                    else 0
-                ), by=.(sid, day, C)])
+                    R=seqsim(C, reads.target=library_size[1], efficiency=pcr_efficiency[1]),
+                    read.per.cell=library_size[1]/sum(C)
+                ), by=.(sid, day)])
             setkey(r, sid, day, lid)
             r
         } else NULL
     })
-    san_stochastic_ranksize_with_pcr <- reactive({
-        if (!is.null(san_stochastic_results_with_pcr())) {
-            rank_size(san_stochastic_results_with_pcr()[, list(sid, day, lsize=R)])
-        } else NULL
+    san_stochastic_results_size_expr <- reactive({
+        if ("cells" %in% names(DATASET$lineagesizes))
+            expression(R/reads_per_cell)
+        else if ("reads" %in% names(DATASET$lineagesizes))
+            expression(R)
+        else
+            stop("lineagesizes must contain column 'cells' or 'reads'")
     })
-    
+
     # Simulate read-count thresholding
     san_stochastic_results_with_pcr_filtered <- reactive({
         if (!is.null(san_stochastic_results_with_pcr())) {
@@ -426,86 +390,101 @@ function(input, output, session) {
     })
     san_stochastic_ranksize_with_pcr_filtered <- reactive({
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            rank_size(san_stochastic_results_with_pcr_filtered()[, list(sid, day, lsize=R)])
-        } else NULL
-    })
-    san_stochastic_powerlawfit_with_pcr <- reactive({
-        if (!is.null(san_stochastic_ranksize_with_pcr_filtered())) {
-            ranksize_pcr <- san_stochastic_ranksize_with_pcr_filtered()
-            pareto <- fit_pareto(ranksize_pcr)
-            limit.alpha <- pareto[day >= LT47.LIMIT.ALPHA.STARTDAY, signif(mean(alpha), digits=2)]
-            r <- fit_powerlaw_model(ranksize_pcr, alpha=limit.alpha)
-            r[, pareto.alpha.sid.day := pareto[r, alpha] ]
-            r
+            rank_size(san_stochastic_results_with_pcr_filtered()[, list(sid, day, size=eval(san_stochastic_results_size_expr()))])
         } else NULL
     })
 
-    
     # The currently loaded parameterset
     # Note that this reflects the values of the parameters at loading time
-    parameterset.loaded <- NULL
+    parameterset.loaded <- reactiveVal()
     
     # Load parameters and update UI
     observeEvent(input$loadfrom, {
         # Return if no parameter set is selected
         if ((length(input$loadfrom) != 1) || (input$loadfrom == "")) {
-            parameterset.loaded <<- NULL
             return()
         }
         # Return if the selected file is already loaded
-        if (!is.null(parameterset.loaded) && (parameterset.loaded$name == input$loadfrom))
+        ps <- parameterset.loaded()
+        if (!is.null(ps) && is.character(ps$name) && (ps$name == input$loadfrom))
             return()
         # Load file
         message("Loading parameter set ", input$loadfrom, " from ", parameterset.fullpath(input$loadfrom))
-        parameterset.loaded <<- local({
+        parameterset.loaded(local({
             load(file=parameterset.fullpath(input$loadfrom))
             c(SAN.PARAMS, list(name=input$loadfrom))
-        })
+        }))
+    })
+    observeEvent(parameterset.loaded, {
         # Update parameter values
-        if (!is.null(parameterset.loaded$s0))
-            updateNumericInput(session, "s0", value=parameterset.loaded$s0)
-        if (!is.null(parameterset.loaded$rates))
-            updateRateInput(session, value=parameterset.loaded$rates, alwaysUpdateOutputAsWell=TRUE)
-        if (!is.null(parameterset.loaded$pcr_efficiency))
-            updateNumericInput(session, "pcr_efficiency", value=parameterset.loaded$pcr_efficiency)
-        if (!is.null(parameterset.loaded$library_size))
-            updateNumericInput(session, "library_size", value=parameterset.loaded$library_size)
-        if (!is.null(parameterset.loaded$phantom_threshold))
-            updateNumericInput(session, "phantom_threshold", value=parameterset.loaded$phantom_threshold)
+        message("Parameter set loaded, updating UI")
+        ps <- parameterset.loaded()
+        if (!is.null(ps$s0))
+            updateNumericInput(session, "s0", value=ps$s0)
+        if (!is.null(ps$rates))
+            updateRateInput(session, value=ps$rates, alwaysUpdateOutputAsWell=TRUE)
+        if (!is.null(ps$pcr_efficiency))
+            updateNumericInput(session, "pcr_efficiency", value=ps$pcr_efficiency)
+        if (!is.null(ps$library_size))
+            updateNumericInput(session, "library_size", value=ps$library_size)
+        if (!is.null(ps$phantom_threshold))
+            updateNumericInput(session, "phantom_threshold", value=ps$phantom_threshold)
     })
     # Load parameter set "default" on startup
-    updateSelectInput(session, "loadfrom", selected=DEFAULT.PARAMETERSET,
-                      choices=c("select set to load"="", parametersets.list()))
+    if (is.character(DEFAULT.PARAMETERSET))
+        updateSelectInput(session, "loadfrom", selected=DEFAULT.PARAMETERSET,
+                          choices=c("select set to load"="", parametersets.list()))
+    else if (is.list(DEFAULT.PARAMETERSET)) {
+        updateSelectInput(session, "loadfrom", selected=character(0),
+                          choices=c("select set to load"="", parametersets.list()))
+        parameterset.loaded(DEFAULT.PARAMETERSET)
+    } else {
+        stop("DEFAULT.PARAMETERSET be a parameterset object or the name of a parameter set to load")
+    }
     
     # If a loaded parameter set is changed, don't show it as selected anymore
     observeEvent(input$s0, {
-        if (is.null(parameterset.loaded$s0) || is.samevalue(parameterset.loaded$s0, input$s0))
+        if (is.null(isolate(parameterset.loaded()$name)))
             return()
-        message("Parameter set has been modified (s0 changed), no longer matches ", parameterset.loaded$name)
+        if (is.null(isolate(parameterset.loaded()$s0)) || is.samevalue(isolate(parameterset.loaded()$s0), input$s0))
+            return()
+        message("Parameter set has been modified (s0 changed), no longer matches ", parameterset.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
     })
     observeEvent(input$rates, {
-        if (is.null(parameterset.loaded$rates) || are.rates.identical(parameterset.loaded$rates, as.data.table(hot_to_r(input$rates))))
+        if (is.null(isolate(parameterset.loaded()$name)))
             return()
-        message("Parameter set has been modified (rates changed), no longer matches ", parameterset.loaded$name)
+        if (is.null(isolate(parameterset.loaded()$rates)) || are.rates.identical(isolate(parameterset.loaded()$rates),
+                                                                                 as.data.table(hot_to_r(input$rates))))
+            return()
+        message("Parameter set has been modified (rates changed), no longer matches ", parameterset.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
     })
     observeEvent(input$pcr_efficiency, {
-        if (is.null(parameterset.loaded$pcr_efficiency) || is.samevalue(parameterset.loaded$pcr_efficiency, input$pcr_efficiency))
+        if (is.null(isolate(parameterset.loaded()$name)))
             return()
-        message("Parameter set has been modified (pcr_efficiency changed), no longer matches ", parameterset.loaded$name)
+        if (is.null(isolate(parameterset.loaded()$pcr_efficiency)) || is.samevalue(isolate(parameterset.loaded()$pcr_efficiency),
+                                                                                   input$pcr_efficiency))
+            return()
+        message("Parameter set has been modified (pcr_efficiency changed), no longer matches ", parameterset.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
     })
     observeEvent(input$library_size, {
-        if (is.null(parameterset.loaded$library_size) || is.samevalue(parameterset.loaded$library_size, input$library_size))
+        if (is.null(isolate(parameterset.loaded()$name)))
             return()
-        message("Parameter set has been modified (library_size changed), no longer matches ", parameterset.loaded$name)
+        if (is.null(isolate(parameterset.loaded()$library_size)) || is.samevalue(isolate(parameterset.loaded()$library_size),
+                                                                                 input$library_size))
+            return()
+        message("Parameter set has been modified (library_size changed), no longer matches ", parameterset.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
     })
     observeEvent(input$phantom_threshold, {
-        if (is.null(parameterset.loaded$phantom_threshold) || is.samevalue(parameterset.loaded$phantom_threshold, input$phantom_threshold))
+        if (is.null(isolate(parameterset.loaded()$name)))
             return()
-        message("Parameter set has been modified (phantom_threshold changed), no longer matches ", parameterset.loaded$name)
+        if (is.null(isolate(parameterset.loaded()$phantom_threshold)) || is.samevalue(isolate(parameterset.loaded()$phantom_threshold),
+                                                                                      input$phantom_threshold))
+            return()
+        message("Parameter set has been modified (phantom_threshold changed), no longer matches ", isolate(parameterset.loaded()$name))
         updateSelectInput(session, "loadfrom", selected=character(0))
     })
 
@@ -614,8 +593,8 @@ function(input, output, session) {
 
         # Plot results
         p <- ggplot(data=r, aes(x=day)) +
-            stat_summary(data=ORGANOIDSIZES, aes(y=count, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
-            stat_summary(data=ORGANOIDSIZES, aes(y=count, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=DATASET$organoidsizes, aes(y=cells, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
+            stat_summary(data=DATASET$organoidsizes, aes(y=cells, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(aes(y=C, col='mod.C', linetype='mod.ana'), size=LWD2) +
             geom_line(aes(y=S, col='mod.S', linetype='mod.ana'), size=LWD) +
             geom_line(aes(y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
@@ -753,29 +732,16 @@ function(input, output, session) {
             san_stochastic_ranksize_with_pcr_filtered()[day==input$day_lsd]
         } else data.table()
         
-        # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        powerlaw <- if (input$stochastic_lsd_incpowerlaw && !is.null(san_stochastic_powerlawfit_with_pcr())) {
-            san_stochastic_powerlawfit_with_pcr()[day==input$day_lsd]
-        } else data.table()
-
         # Fetch experimental data
-        rank_size.experiment <- LT47.RANKSIZE[day==input$day_lsd]
-        
+        rank_size.experiment <- dataset_ranksize()[day==input$day_lsd]
+            
         # Abort if no data is available to plot
         if (nrow(rank_size.model) + nrow(rank_size.model_pcr) + nrow(rank_size.experiment) == 0)
             return(NULL)
 
-        # Rank-size normalization and bounds to use when plotting curves
-        rank.max <- max(rank_size.experiment$rank, rank_size.model$rank, rank_size.model_pcr$rank)
-        size.min <- min(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
-        size.max <- max(rank_size.experiment$size, rank_size.model$size, rank_size.model_pcr$size)
-        xmax <- 10^(ceiling(10*log10(rank.max))/10)
-        ymin <- 10^(  floor(log10(size.min)))
-        ymax <- 10^(ceiling(log10(size.max)))
-
         # Legend overrides
-        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid", `powerlaw`="solid"),
-                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2, `powerlaw`=LWD2))
+        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
+                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
         groups <- list()
 
         # Setup plot
@@ -785,22 +751,14 @@ function(input, output, session) {
             annotation_logticks(sides="bl") +
             xlab("rank") +
             ylab("lineage size [norm. reads]") +
-            scale_color_manual(breaks=c('data', 'model', 'model+seq.', 'powerlaw'),
-                               values=c('maroon', 'violet', 'black', 'darkcyan'),
+            scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
+                               values=c('maroon', 'violet', 'black'),
                                name=NULL)
-        if (input$stochastic_lsd_incpowerlaw && (nrow(powerlaw) > 0)) {
-            model_pcr.rm <- max(rank_size.model_pcr$rank)
-            model_pcr.sm <- min(rank_size.model_pcr$size)
-            model_pcr.r.scale <- rank.max / model_pcr.rm
-            model_pcr.s.scale <- size.min / model_pcr.sm
-            p <- p + geom_vline(data=powerlaw, aes(xintercept=(zipf.rank.min-1)*model_pcr.r.scale + 1),
-                                col='darkcyan', linetype="dotted", size=LWD)
-        }
-        
+
         # Draw rank-size curves for the experimental lineage sizes in all replicates
         plot_rank_size <- function(rank_size, col, ...) {
-            align_rank_size(rank_size, rank.max=rank.max, size.min=size.min)[, {
-                p <<- p + geom_line(data=copy(.SD), aes(x=rank.aligned, y=size.aligned, col=col), ...)
+            rank_size[, {
+                p <<- p + geom_line(data=copy(.SD), aes(x=rank, y=size, col=col), ...)
                 NULL
             }, by=sid]
         }
@@ -816,30 +774,7 @@ function(input, output, session) {
             groups[length(groups)+1] <- "model+seq."
             plot_rank_size(rank_size.model_pcr, col="model+seq.", size=LWD2)
         }
-        if (input$stochastic_lsd_incpowerlaw && (nrow(powerlaw) > 0)) {
-            groups[length(groups)+1] <- "powerlaw"
-            stopifnot(nrow(powerlaw) == 1)
-            d <- with(powerlaw, {
-                transform <- function(r.scale, s.scale, f) { function(r) { f(r/r.scale)*s.scale } }
-                f.nonzipf <- transform(model_pcr.r.scale, model_pcr.s.scale,
-                                       function(r) { 10^nonzipf.d * r^nonzipf.k })
-                f.zipf <- transform(model_pcr.r.scale, model_pcr.s.scale,
-                                    function(r) { 10^zipf.d * r^zipf.k })
-                x <- c(1, zipf.rank.min*model_pcr.r.scale, zipf.rank.min*model_pcr.r.scale, model_pcr.rm*model_pcr.r.scale)
-                y <- c(f.nonzipf(x[1]), f.nonzipf(x[2]), f.zipf(x[3]), f.zipf(x[4]))
-                list(x=x, y=y)
-            })
-            p <- (p +
-                geom_segment(data=powerlaw, aes(x=d$x[1], y=d$y[1], xend=d$x[2], yend=d$y[2], col='powerlaw'),
-                              linetype='solid', size=LWD2) +
-                geom_segment(data=powerlaw, aes(x=d$x[3], y=d$y[3], xend=d$x[4], yend=d$y[4], col='powerlaw'),
-                              linetype='solid', size=LWD2) +
-                annotate("text", x=d$x[2], hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" <- roughly uniform size", size=5)) +
-                annotate("text", x=d$x[3], hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" powerlaw tail ->", size=5)
-        }
-        
+
         #  If nothing was plottet, return empty
         if (length(groups) == 0)
             return()
@@ -855,33 +790,21 @@ function(input, output, session) {
             return()
 
         # Simulate stochastic SAN model
-        log_lsize.model <- if (input$stochastic_lsd_incpuremodel) {
+        log_size.model <- if (input$stochastic_lsd_incpuremodel) {
             san_stochastic_results()[(day==input$day_lsd) & (C > 0), list(
-                sid, log_lsize=log10(C)
+                sid, log_size=log10(C)
             )]
         } else data.table()
 
         # Simulate PCR+Sequencing
         log_lsize.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
             san_stochastic_results_with_pcr_filtered()[day==input$day_lsd, list(
-                sid, log_lsize=log10(R)
-            )]
-        } else data.table()
-
-        # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        log_powerlaw <- if (input$stochastic_lsd_incpowerlaw && (!is.null(san_stochastic_powerlawfit_with_pcr()))) {
-            san_stochastic_powerlawfit_with_pcr()[day==input$day_lsd][, list(
-                sid, log_zipf.rank.min=log10(zipf.rank.min)
+                sid, log_size=log10(R)
             )]
         } else data.table()
 
         # Fetch experimental data
-        log_lsize.experiment <- LT47[day==input$day_lsd, list(
-            sid, log_lsize=log10(lsize)
-        )]
-
-        # Size normalization
-        log_lsize.min <- min(log_lsize.experiment$log_lsize, log_lsize.model_pcr$log_lsize, log_lsize.model$log_lsize)
+        log_size.experiment <- dataset_logsize()[day==input$day_lsd]
 
         # Legend overrides
         legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
@@ -897,31 +820,24 @@ function(input, output, session) {
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
-        if (input$stochastic_lsd_incpowerlaw && (nrow(log_powerlaw) > 0)) {
-            p <- p + geom_vline(data=log_powerlaw, aes(xintercept=log_zipf.rank.min), col='darkcyan') +
-                annotate("text", x=log_powerlaw$log_zipf.rank.min, hjust=-0.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" powertail tail ->", size=5) +
-                annotate("text", x=log_powerlaw$log_zipf.rank.min, hjust=1.03, y=Inf, vjust=1.5, col='darkcyan',
-                         label=" <- roughtly uniform size ", size=5)
-        }
 
         # Draw densities
         if (nrow(log_lsize.experiment) > 0) {
             groups[length(groups)+1] <- "data"
             log_lsize.experiment[, {
-                p <<- p + stat_density(data=copy(.SD), aes(x=log_lsize - min(log_lsize) + log_lsize.min, col='data'),
+                p <<- p + stat_density(data=copy(.SD), aes(x=log_size, col='data'),
                                        geom="line", size=LWD, linetype="dashed")
                 NULL
             }, by=sid]
         }
         if (input$stochastic_lsd_incpuremodel && (nrow(log_lsize.model) > 0)) {
             groups[length(groups)+1] <- "model"
-            p <- p + stat_density(data=log_lsize.model, aes(x=log_lsize - min(log_lsize) + log_lsize.min, col='model'),
+            p <- p + stat_density(data=log_lsize.model, aes(x=log_size, col='model'),
                                   geom="line", size=LWD)
         }
         if (nrow(log_lsize.model_pcr) > 0) {
             groups[length(groups)+1] <- "model+seq."
-            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_lsize - min(log_lsize) + log_lsize.min, col='model+seq.'),
+            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_size, col='model+seq.'),
                                   geom="line", size=LWD2)
         }
 
@@ -941,22 +857,6 @@ function(input, output, session) {
                stop("unknown plot type ", input$stochastic_lsd_plottype))
     })
 
-    # Download LSD simulation results
-    output$stochastic_lsd_download <- downloadHandler(
-        filename="san_results.tab.gz",
-        contentType="text/tab-separated-values+gzip",
-        content=function(file) {
-            message("Saving simulation results to ", file)
-            file_gz <- gzfile(file, open="wb+")
-            write_tsv(san_stochastic_results_with_pcr()[, list(day, lid, S, A, N, C, R)],
-                      file=file_gz,
-                      col_names=TRUE, na="")
-            flush(file_gz)
-            close(file_gz)
-            return(file)
-        }
-    )
-
     # Number of surviving lineages
     output$stochastic_nlineages <- renderPlot({
         message("Rendering number-of-lineages plot ")
@@ -973,11 +873,6 @@ function(input, output, session) {
             san_stochastic_ranksize_with_pcr_filtered()[, list(nlineages=.N), by=day]
         } else data.table()
 
-        # Do the same (model-free!) powerlaw fit that data/lt47.processed.R applies to exp. data
-        lsd_powerlaw <- if (input$stochastic_nlineages_incpowerlaw && (!is.null(san_stochastic_powerlawfit_with_pcr()))) {
-            san_stochastic_powerlawfit_with_pcr()
-        } else data.table()
-        
         # Legend overrides
         legend.override <- list(linetype=c(`exp.obs`="dashed", `mod.all`="solid",  `mod.obs`="solid",
                                            `mod.S`="solid", `exp.nonzipf`="dashed", `mod.nonzipf`="solid"),
@@ -989,8 +884,8 @@ function(input, output, session) {
         groups[length(groups)+1] <- "exp.obs"
         groups[length(groups)+1] <- "mod.all"
         p <- ggplot(data=NULL, aes(x=day, y=nlineages)) +
-            stat_summary(data=LT47.NLINEAGES, aes(col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-            stat_summary(data=LT47.NLINEAGES, aes(col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=dataset_nlineages(), aes(col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+            stat_summary(data=dataset_nlineages(), aes(col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(col='mod.all'), size=LWD)
         if (input$stochastic_nlineages_logy)
             p <- p +
@@ -1000,14 +895,6 @@ function(input, output, session) {
             groups[length(groups)+1] <- "mod.obs"
             p <- p + geom_line(data=lsd_pcr, aes(col='mod.obs'), size=LWD2)
         }
-        if (input$stochastic_nlineages_incpowerlaw && (nrow(lsd_powerlaw) > 0)) {
-            groups[length(groups)+1] <- "mod.nonzipf"
-            groups[length(groups)+1] <- "exp.nonzipf"
-            p <- (p +
-                geom_line(data=lsd_powerlaw, aes(y=zipf.rank.min, col='mod.nonzipf'), size=LWD2) +
-                stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-                stat_summary(data=LT47.POWERLAW, aes(y=zipf.rank.min, col='exp.nonzipf'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD))
-        }
 
         # Add legend
         groups[length(groups)+1] <- "mod.S"
@@ -1016,9 +903,9 @@ function(input, output, session) {
         p <- p +
             geom_line(data=lsd_scells, aes(col='mod.S'), size=LWD) +
             scale_color_manual(breaks=groups.all,
-                               labels=c('obs. (data)', 'outside powerlaw tail (data)', 'obs. (model+seq.)',
-                                        'total (model)', 'extant S-cells (model)', 'outside powerlaw tail (model+seq.)'),
-                               values=c('maroon', 'darkcyan', 'black', 'violet', 'cornflowerblue', 'darkcyan'),
+                               labels=c('obs. (data)', 'obs. (model+seq.)',
+                                        'total (model)', 'extant S-cells (model)'),
+                               values=c('maroon', 'black', 'violet', 'cornflowerblue'),
                                name=NULL) +
             xlab("time [days]") +
             ylab("number of lineages")
@@ -1027,237 +914,4 @@ function(input, output, session) {
         p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
                                     ncol=2, byrow=FALSE))
     })
-
-    output$pareto_alpha <- renderPlot({
-        message("Rendering Pareto-alpha plot ")
-        if (is.null(san_stochastic_results()))
-            return()
-
-        # Compute the alpha estimated from the simulation results
-        powerlaw_model <- if (input$pareto_alpha_incpuremodel && !is.null(san_stochastic_powerlawfit())) {
-            san_stochastic_powerlawfit()
-        } else data.table()
-
-        # Compute the alpha estimated from the simulation results
-        powerlaw_model_pcr <- if (!is.null(san_stochastic_powerlawfit_with_pcr())) {
-            san_stochastic_powerlawfit_with_pcr()
-        } else data.table()
-
-        # Legend overrides
-        legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
-                                size=c(data=LWD, model=LWD, `model+seq.`=LWD2))
-        groups <- list()
-
-        # Draw plot
-        groups[length(groups)+1] <- "data"
-        p <- ggplot(data=NULL, aes(x=day, y=pareto.alpha.sid.day)) +
-            stat_summary(data=LT47.POWERLAW, aes(col='data'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-            stat_summary(data=LT47.POWERLAW, aes(col='data'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD)
-        if (nrow(powerlaw_model) > 0) {
-            groups[length(groups)+1] <- "model"
-            p <- p + geom_line(data=powerlaw_model, aes(col='model'), size=LWD2)
-        }
-        if (nrow(powerlaw_model_pcr) > 0) {
-            groups[length(groups)+1] <- "model+seq."
-            p <- p + geom_line(data=powerlaw_model_pcr, aes(col='model+seq.'), size=LWD2)
-        }
-
-        # Add legend
-        groups.all <- c('data', 'model', 'model+seq.')
-        groups <- groups.all[groups.all %in% groups]
-        p <- p +
-            scale_color_manual(breaks=groups.all,
-                               labels=c('data', 'model', 'model+seq.'),
-                               values=c('maroon', 'violet', 'black'),
-                               name=NULL) +
-            xlab("time [days]") +
-            ylab(expression("Pareto equality index (" ~ alpha ~ ")"))
-
-        # Finish plot
-        p + guides(col=guide_legend(override.aes=lapply(legend.override, function(o) { o[unlist(groups)] }),
-                                    ncol=2, byrow=FALSE))
-    })
-
-    # S-cell extinction time vs. lineage size
-    output$stochastic_scellext_vs_lineagesize <- renderPlot({
-        message("Rendering S-cell extinction time vs. lineage size plot")
-        if (is.null(san_stochastic_extinction_trajectories()))
-            return()
-
-        ext_traj <- san_stochastic_extinction_trajectories()
-        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
-
-        day.max <- ext_traj[, max(day)]
-        ggplot(data=ext_traj[day==day.max],
-               aes(x=ifelse(is.finite(Text.S), Text.S, day.max+1),
-                   y=pmax(C, 0.1),
-                   ymin=pmax(C-C.sd, 0.1),
-                   ymax=pmax(C+C.sd, 0.1))) +
-            geom_ribbon(alpha=0.15) +
-            geom_line(size=LWD2) +
-            lims(x=c(0, Tfinal()+1)) +
-            my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
-            annotation_logticks(sides="l") +
-            xlab("S-cell extinction time [days]") +
-            ylab(paste0("lineage size [cells]"))
-    })
-
-    # S-cell-containing lineages
-    output$stochastic_scellext_vs_time <- renderPlot({
-        message("Rendering surving fraction of lineages plot")
-        if (is.null(san_stochastic_extinction_trajectories()))
-            return()
-
-        ext_traj <- san_stochastic_extinction_trajectories()
-        data <- rbind(ext_traj[, list(survived=sum(nlineages[Text.S > day]) / sum(nlineages))
-                               , by=day],
-                      data.table(day=Tfinal()+1,
-                                 survived=ext_traj[day==Tfinal(), sum(nlineages[is.infinite(Text.S)]) / sum(nlineages)]))
-        ymin <- data[, min(survived)]
-        ggplot(data=data, aes(x=day, y=100*survived)) +
-            geom_line(col='cornflowerblue') +
-            lims(x=c(0, Tfinal()+1)) +
-            scale_y_log10(limits=c(100*ymin, 100), oob=oob_keep) +
-            xlab("time [days]") +
-            ylab("lineages [%]")
-    })
-
-    # S-cell extinction trajectories
-    stochastic_scellext_trajectory_plot <- function(data, ymax) {
-        ggplot(data=data, aes(x=day)) +
-            geom_ribbon(aes(ymin=pmax(C-C.sd, 0.1), ymax=pmax(C+C.sd, 0.1), fill='mod.C'), alpha=0.2) +
-            geom_ribbon(aes(ymin=pmax(S-S.sd, 0.1), ymax=pmax(S+S.sd, 0.1), fill='mod.S'), alpha=0.15) +
-            geom_ribbon(aes(ymin=pmax(A-A.sd, 0.1), ymax=pmax(A+A.sd, 0.1), fill='mod.A'), alpha=0.15) +
-            geom_ribbon(aes(ymin=pmax(N-N.sd, 0.1), ymax=pmax(N+N.sd, 0.1), fill='mod.N'), alpha=0.15) +
-            geom_line(aes(y=pmax(C, 0.1), col='mod.C'), size=LWD2) +
-            geom_line(aes(y=pmax(S, 0.1), col='mod.S'), size=LWD) +
-            geom_line(aes(y=pmax(A, 0.1), col='mod.A'), size=LWD) +
-            geom_line(aes(y=pmax(N, 0.1), col='mod.N'), size=LWD) +
-            my_scale_log10(scale_y_log10, limits=c(1e0, ymax), oob=oob_keep) +
-            annotation_logticks(sides="l") +
-            scale_color_manual(breaks=c('mod.C', 'mod.S', 'mod.A', 'mod.N'),
-                               labels=c('total (model)', 'S (model)', 'A (model)', 'N (model)'),
-                               values=c('black', 'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4'),
-                               name=NULL) +
-            xlab("time [days]") +
-            ylab("cells per lineage") +
-            guides(col=guide_legend(override.aes=list(linetype=c('solid', 'solid', 'solid', 'solid'),
-                                                      size=c(LWD2, LWD, LWD, LWD)),
-                                    ncol=2, byrow=FALSE),
-                   fill=guide_none())
-    }
-    stochastic_scellext_trajectory_label <- reactiveVal()
-    output$stochastic_scellext_trajectory_label <- renderUI({
-        HTML(stochastic_scellext_trajectory_label())
-    })
-    output$stochastic_scellext_trajectory <- renderPlot({
-        message("Rendering S-cell trajectory plot")
-        if (is.null(san_stochastic_extinction_trajectories()))
-            return()
-
-        # Fetch average trajectories
-        ext_traj <- san_stochastic_extinction_trajectories()
-        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
-
-        # Restrict to those with the selected S-cell extinctin time
-        if (input$day_scellext <= Tfinal()) {
-            ext_traj_extday <- ext_traj[Text.S == input$day_scellext]
-            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction on day ", input$day_scellext))
-            if (nrow(ext_traj_extday) < 1)
-                stop("simulation produced no lineages with S-cell extinction on day ", input$day_scellext)
-        } else {
-            ext_traj_extday <- san_stochastic_extinction_trajectories()[is.infinite(Text.S)]
-            stochastic_scellext_trajectory_label(paste0("SAN trajectories assuming S-cell extinction <b>after</b> day ", Tfinal()))
-            if (nrow(ext_traj_extday) < 1)
-                stop("simulation produced no lineages with S-cells surving past day ", Tfinal())
-        }
-
-        # Plot results
-        stochastic_scellext_trajectory_plot(ext_traj_extday, ymax)
-    })
-
-    # S-cell extinction trajectory video
-    stochastic_scellext_trajectory_video_file <- reactiveVal(NULL)
-    observeEvent({
-        # All inputs that the video depends on
-        input_rates()
-        input$s0
-        input$scellext_nlineages
-        input$stochastic_scellext_trajectory_video_fps
-    }, {
-        # Remove outdated video if the simulated trajectories change
-        if (!is.null(stochastic_scellext_trajectory_video_file())) {
-            file.remove(stochastic_scellext_trajectory_video_file())
-            stochastic_scellext_trajectory_video_file(NULL)
-        }
-    })
-    observeEvent(input$stochastic_scellext_trajectory_video_generate, {
-        # Generate video upon explicit request and only if its outdated (i.e. NULL)
-        if (is.null(san_stochastic_extinction_trajectories()) ||
-            !is.null(stochastic_scellext_trajectory_video_file()))
-            return()
-        file <- tempfile(fileext=".mp4")
-        onStop(function() { file.remove(file) })
-        message("Rendering S-cell trajectory video to temporary file ", file)
-
-        # Fetch trajectories and setup plot
-        ext_traj <- san_stochastic_extinction_trajectories()
-        ymax <- ext_traj[, 10^ceiling(log10(max(C)))]
-        p <- stochastic_scellext_trajectory_plot(ext_traj, ymax) +
-            transition_states(Text.S, transition_length=1, state_length=0, wrap=FALSE) +
-            ease_aes(y="linear")
-
-        # Create animation
-        withProgress(min=0, max=1, value=0, {
-            progress.last <- 0
-            progress.pattern <- "^.*\\[(=*)(>-*)\\].*"
-            incProgress(0, message="preparing animation")
-
-            # Render animation as h264-encoded mp4 file
-            withCallingHandlers({
-                animate(p, duration=Tfinal(), fps=as.numeric(input$stochastic_scellext_trajectory_video_fps), rewind=FALSE,
-                        width=9, height=6, units="in", res=200,
-                        renderer=av_renderer(codec="libx264", file=file))
-            }, message=function(m) {
-                # Update shiny progress indicator if gganimate::animate outputs a progress message
-                # Note: These messages are output only if r-lib/progres believes that we're in some
-                # kind of interactive session, which is the case if we're running in RStudio *or* if
-                # stderr is a tty.
-                if (grepl(progress.pattern, m)) {
-                    # Message looks like a progress message from gganimate::animate
-                    progress.done <- nchar(gsub(progress.pattern, "\\1", m))
-                    progress.todo <-  nchar(gsub(progress.pattern, "\\2", m))
-                    progress <- progress.done / (progress.done + progress.todo)
-                    incProgress(progress - progress.last,
-                                message=if(progress < 1) "rendering animation" else "encoding video")
-                    progress.last <<- progress
-                }
-            }, error=function(e) {
-                message("Removing incomplete file ", file)
-                file.remove(file)
-                file <<- NULL
-            })
-        })
-
-        # Update video file
-        stochastic_scellext_trajectory_video_file(file)
-    })
-    observeEvent(stochastic_scellext_trajectory_video_file(), ignoreNULL=FALSE, {
-        # Toggle video generate/download button visibility depending on whether the file is up-to-date
-        if (is.null(stochastic_scellext_trajectory_video_file())) {
-            message("Enabling S-cell trajectory video generation")
-            show(id="stochastic_scellext_trajectory_video_generate")
-            hide(id="stochastic_scellext_trajectory_video_download")
-        } else {
-            message("Enabling S-cell trajectory video download")
-            hide(id="stochastic_scellext_trajectory_video_generate")
-            show(id="stochastic_scellext_trajectory_video_download")
-        }
-    })
-    output$stochastic_scellext_trajectory_video_download <- downloadHandler(
-        filename="scell_extinction.mp4",
-        contentType="video/mp4",
-        content=function(file) { file.copy(stochastic_scellext_trajectory_video_file(), file) }
-    )
-
 }

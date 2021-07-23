@@ -5,9 +5,14 @@
 
 using namespace Rcpp;
 
+#ifdef RCPP_USE_GLOBAL_ROSTREAM
+Rcpp::Rostream<true>&  Rcpp::Rcout = Rcpp::Rcpp_cout_get();
+Rcpp::Rostream<false>& Rcpp::Rcerr = Rcpp::Rcpp_cerr_get();
+#endif
+
 // san_timediscrete_c
 List san_timediscrete_c(const List C_init, const NumericVector p_S, const NumericVector p_0, const NumericVector p_R, const NumericVector p_A, const NumericVector p_N, const NumericVector p_D, const IntegerVector steps);
-RcppExport SEXP _SANsimulatoR_san_timediscrete_c(SEXP C_initSEXP, SEXP p_SSEXP, SEXP p_0SEXP, SEXP p_RSEXP, SEXP p_ASEXP, SEXP p_NSEXP, SEXP p_DSEXP, SEXP stepsSEXP) {
+RcppExport SEXP _SANjar_san_timediscrete_c(SEXP C_initSEXP, SEXP p_SSEXP, SEXP p_0SEXP, SEXP p_RSEXP, SEXP p_ASEXP, SEXP p_NSEXP, SEXP p_DSEXP, SEXP stepsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
@@ -25,11 +30,11 @@ END_RCPP
 }
 
 static const R_CallMethodDef CallEntries[] = {
-    {"_SANsimulatoR_san_timediscrete_c", (DL_FUNC) &_SANsimulatoR_san_timediscrete_c, 8},
+    {"_SANjar_san_timediscrete_c", (DL_FUNC) &_SANjar_san_timediscrete_c, 8},
     {NULL, NULL, 0}
 };
 
-RcppExport void R_init_SANsimulatoR(DllInfo *dll) {
+RcppExport void R_init_SANjar(DllInfo *dll) {
     R_registerRoutines(dll, NULL, CallEntries, NULL, NULL);
     R_useDynamicSymbols(dll, FALSE);
 }
