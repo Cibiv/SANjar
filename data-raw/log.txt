@@ -1,0 +1,9 @@
+h9_organoidsizes_facs.tsv (previously data/cellcounts.tab) 23.06.2020:
+Data in h9_organoidsizes_facs extracted manually from 200605-181012-181120-countingcellnumbers-cellcompetition-experiments,
+which stems from /lineagetracing and modelling organoid growth/Data/200615-reanalysis-FACS and cell counts GGTT KO mixtures/200605-181012-181120-countingcellnumbers-cellcompetition-experiments.xlsx in the Dropbox folder.
+
+h9_organoidsizes_area.tsv 23.07.2021:
+Result of converting H9_WT_sizes_area_measurments.xslx (previously found in data/) to tsv format.
+
+lt47_h9_only (previously data/lineagetracing_H9_only.tsv), 12.09.2020:
+Contains the results of the lineagetracing experiment LT47, analyzed with Benoit Schroeders pipeline.
