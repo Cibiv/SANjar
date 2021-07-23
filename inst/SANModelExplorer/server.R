@@ -106,9 +106,9 @@ are.rates.identical <- function(r1, r2) {
 function(input, output, session) {
     dataset_lineagesize_expr <- reactive({
         if ("cells" %in% names(DATASET$lineagesizes))
-            expression("cells")
+            expression(cells)
         else if ("reads" %in% names(DATASET$lineagesizes))
-            expression("reads")
+            expression(reads)
         else
             stop("lineagesizes must contain column 'cells' or 'reads'")
     })
@@ -295,10 +295,10 @@ function(input, output, session) {
     # PCR efficiency parameter
     pcr_efficiency_manual_or_auto <- reactive({
         if (!is.na(input$pcr_efficiency) && (input$pcr_efficiency >= 0) && (input$pcr_efficiency <= 1)) {
-            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
+            eff <- DATASET$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- LT47.GWPCR.PARAMETERS[, list(pcr_efficiency), keyby=day]
+            eff <- DATASET$sequencing[, list(pcr_efficiency), keyby=day]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -312,10 +312,10 @@ function(input, output, session) {
     # Sequencing library size parameter
     library_size_manual_or_auto <- reactive({
         if (!is.na(input$library_size) && (input$library_size > 0)) {
-            ls <- LT47.GWPCR.PARAMETERS[, list(library_size=(input$library_size)), keyby=day]
+            ls <- DATASET$sequencing[, list(library_size=(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- LT47.GWPCR.PARAMETERS[, list(library_size), keyby=day]
+            ls <- DATASET$sequencing[, list(library_size), keyby=day]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -334,10 +334,10 @@ function(input, output, session) {
     # Sequencing read-count threshold parameter
     phantom_threshold_manual_or_auto <- reactive({
         if (!is.na(input$phantom_threshold) && (input$phantom_threshold > 0)) {
-            th <- LT47.GWPCR.PARAMETERS[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
+            th <- DATASET$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  LT47.GWPCR.PARAMETERS[, list(phantom_threshold), keyby=day]
+            th <-  DATASET$sequencing[, list(phantom_threshold), keyby=day]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
@@ -366,7 +366,7 @@ function(input, output, session) {
                 [, list(
                     dt, lid, S, A, N,
                     R=seqsim(C, reads.target=library_size[1], efficiency=pcr_efficiency[1]),
-                    read.per.cell=library_size[1]/sum(C)
+                    reads_per_cell=library_size[1]/sum(C)
                 ), by=.(sid, day)])
             setkey(r, sid, day, lid)
             r
@@ -631,77 +631,6 @@ function(input, output, session) {
         p
     })
 
-    output$deterministic_celltypes <- renderPlot({
-        message("Rendering deterministic organoid composition plot ")
-        if (is.null(san_deterministic_results()))
-            return()
-        
-        # Evaluate deterministic SAN model
-        # We cut cell counts off at 0.1 to avoid plotting problems
-        r <- san_deterministic_results()[,  list(
-            day,
-            S=100 * pmax(S, 1) / C,
-            A=100 * pmax(A, 1) / C,
-            N=100 * pmax(N, 1) / C
-        )]
-
-        CT.CXRC4 <- CELLTYPES[antibody=="CXCR4"]
-        CT.NCAM <- CELLTYPES[antibody=="NCAM"]
-        CT.TRA160 <- CELLTYPES[antibody=="TRA1-60"]
-
-        # Plot results
-        p <- ggplot(data=as.data.table(r), aes(x=day, y=percent)) +
-            stat_summary(data=CT.CXRC4, aes(col='exp.CXRC4', linetype='exp.CXRC4'), fun=mean, geom="line", size=LWD) +
-            stat_summary(data=CT.CXRC4, aes(col='exp.CXRC4'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            stat_summary(data=CT.NCAM, aes(col='exp.NCAM', linetype='exp.NCAM'), fun=mean, geom="line", size=LWD) +
-            stat_summary(data=CT.NCAM, aes(col='exp.NCAM'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            stat_summary(data=CT.TRA160, aes(col='exp.TRA160', linetype='exp.TRA160'), fun=mean, geom="line", size=LWD) +
-            stat_summary(data=CT.TRA160, aes(col='exp.TRA160'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
-            geom_line(aes(y=S, col='mod.S', linetype='mod.S'), size=LWD) +
-            geom_line(aes(y=A, col='mod.A', linetype='mod.A'), size=LWD) +
-            geom_line(aes(y=N, col='mod.N', linetype='mod.N'), size=LWD) +
-            geom_line(aes(y=S+A, col='mod.S+A'), size=LWD) +
-            geom_line(aes(y=S+A, col='mod.A', linetype='mod.S+A'), size=LWD) +
-            geom_line(aes(y=A+N, col='mod.A+N'), size=LWD) +
-            geom_line(aes(y=A+N, col='mod.N', linetype='mod.A+N'), size=LWD) +
-            scale_color_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
-                                        'mod.S', 'mod.A', 'mod.N',
-                                        'mod.S+A', 'mod.A+N'),
-                               labels=c('CXRC4+ (data)', 'NCAM+ (data)', 'TRA1-60+ (data)',
-                                        'S (model)', 'A (model)', 'N (model)',
-                                        'S+A (model)', 'A+N (model)'),
-                               values=c('brown2', 'darkcyan',  'violet',
-                                        'cornflowerblue', 'darkgoldenrod1', 'darkolivegreen4',
-                                        'cornflowerblue', 'darkgoldenrod1'),
-                               name="") +
-            scale_linetype_manual(breaks=c('exp.CXRC4', 'exp.NCAM', 'exp.TRA160',
-                                           'mod.S', 'mod.A', 'mod.N',
-                                           'mod.S+A', 'mod.A+N'),
-                                 values=c('dashed', 'dashed', 'dashed',
-                                          'solid', 'solid', 'solid',
-                                          'FF', 'FF'),
-                                 guide=NULL) +
-            xlab("time [days]") +
-            ylab("fraction of organoid [%]") +
-            guides(col=guide_legend(override.aes=list(linetype=c('dashed', 'dashed', 'dashed',
-                                                                 'solid', 'solid', 'solid',
-                                                                 'solid', 'solid'),
-                                                      size=c(LWD, LWD, LWD,
-                                                             LWD, LWD, LWD,
-                                                             LWD, LWD)),
-                                    ncol=2, byrow=FALSE))
-
-        # Patch legend by rendering the plot as a grob and patching the legens in there
-        g <- ggplotGrob(p)
-        l <- g$grobs[[which(g$layout$name == "guide-box")]]
-        l <- make_legend_key_twocolor(l, 3, 2, 'cornflowerblue', 'darkgoldenrod1', pattern="FF")
-        l <- make_legend_key_twocolor(l, 4, 2, 'darkgoldenrod1', 'darkolivegreen4', pattern="FF")
-        g$grobs[[which(g$layout$name == "guide-box")]] <- l
-
-        # Plot modified grob
-        plot(g)
-    })
-    
     # Message about simulation accuracy
     output$p_cutoff_message <- renderUI({
         helpText(HTML(p_cutoff_message()))
@@ -746,8 +675,8 @@ function(input, output, session) {
 
         # Setup plot
         p <- ggplot() +
-            my_scale_log10(scale_x_log10, limits=c(1, xmax), oob=oob_keep) +
-            my_scale_log10(scale_y_log10, limits=c(ymin, ymax), oob=oob_keep) +
+            my_scale_log10(scale_x_log10, oob=oob_keep) +
+            my_scale_log10(scale_y_log10, oob=oob_keep) +
             annotation_logticks(sides="bl") +
             xlab("rank") +
             ylab("lineage size [norm. reads]") +
@@ -797,7 +726,7 @@ function(input, output, session) {
         } else data.table()
 
         # Simulate PCR+Sequencing
-        log_lsize.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
+        log_size.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
             san_stochastic_results_with_pcr_filtered()[day==input$day_lsd, list(
                 sid, log_size=log10(R)
             )]
@@ -822,22 +751,22 @@ function(input, output, session) {
                                name=NULL)
 
         # Draw densities
-        if (nrow(log_lsize.experiment) > 0) {
+        if (nrow(log_size.experiment) > 0) {
             groups[length(groups)+1] <- "data"
-            log_lsize.experiment[, {
+            log_size.experiment[, {
                 p <<- p + stat_density(data=copy(.SD), aes(x=log_size, col='data'),
                                        geom="line", size=LWD, linetype="dashed")
                 NULL
             }, by=sid]
         }
-        if (input$stochastic_lsd_incpuremodel && (nrow(log_lsize.model) > 0)) {
+        if (input$stochastic_lsd_incpuremodel && (nrow(log_size.model) > 0)) {
             groups[length(groups)+1] <- "model"
-            p <- p + stat_density(data=log_lsize.model, aes(x=log_size, col='model'),
+            p <- p + stat_density(data=log_size.model, aes(x=log_size, col='model'),
                                   geom="line", size=LWD)
         }
-        if (nrow(log_lsize.model_pcr) > 0) {
+        if (nrow(log_size.model_pcr) > 0) {
             groups[length(groups)+1] <- "model+seq."
-            p <- p + stat_density(data=log_lsize.model_pcr, aes(x=log_size, col='model+seq.'),
+            p <- p + stat_density(data=log_size.model_pcr, aes(x=log_size, col='model+seq.'),
                                   geom="line", size=LWD2)
         }
 
@@ -898,7 +827,7 @@ function(input, output, session) {
 
         # Add legend
         groups[length(groups)+1] <- "mod.S"
-        groups.all <- c('exp.obs', 'exp.nonzipf', 'mod.obs', 'mod.all', 'mod.S', 'mod.nonzipf')
+        groups.all <- c('exp.obs', 'mod.obs', 'mod.all', 'mod.S')
         groups <- groups.all[groups.all %in% groups]
         p <- p +
             geom_line(data=lsd_scells, aes(col='mod.S'), size=LWD) +
