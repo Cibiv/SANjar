@@ -4,7 +4,7 @@ library(gwpcR)
 message("*** Importing FACS-based organoid sizes from h9_organoidsizes_facs.tsv")
 h9_organoidsizes_facs <- data.table(read.table("data-raw/h9_organoidsizes_facs.tsv", header=TRUE, sep="\t"))
 h9_organoidsizes_facs <- h9_organoidsizes_facs[, list(
-  day, source="facs", rep, cells=count
+  day, source="facs", sid=rep, cells=count
 )]
 
 message("*** Importing area-based organoid sizes from h9_organoidsizes_area.tsv")
@@ -13,9 +13,10 @@ h9_organoidsizes_area <- data.table(read.table("data-raw/h9_organoidsizes_area.t
 h9_organoidsizes_area <- h9_organoidsizes_area[, list(
   day=as.integer(substr(`Day`, 4, 6)),
   source="area",
-  rep=paste0("b", trimws(substr(`Batch`, 6, 8))),
+  sid=paste0("b", trimws(substr(`Batch`, 6, 8))),
   volume=`Volume`
 )]
+h9_organoidsizes_area[, sid := paste0(sid, "-", 1:.N), by=.(sid)]
 
 message("*** Combinding FACS- and area-based organoid sizes")
 # Combine FACS- and area-based data based on the (interpolated) FACS count for day 10.
@@ -27,8 +28,9 @@ a10 <- mean(h9_organoidsizes_area[day==10, log(volume)])
 s <- exp((3/4)*f9+(1/4)*f13-a10)
 h9_organoidsizes <- rbind(
   h9_organoidsizes_facs,
-  h9_organoidsizes_area[, list(day, source, rep, cells=round(s*volume))]
+  h9_organoidsizes_area[, list(day, source, sid, cells=round(s*volume))]
 )[((source=="facs") & (day < 25)) | (source=="area")]
+setkey(h9_organoidsizes, day, sid)
 
 message("*** Saving organoid sizes to data/h9_organoidsizes.RData")
 save(h9_organoidsizes, file="data/h9_organoidsizes.RData", version=2)
@@ -48,7 +50,7 @@ lt47_ls <- lt47_ls[, {
 }]
 last_sid <- 0L
 lt47_ls[, sid := { last_sid <<- last_sid + 1L }, by=c("day", "sid")]
-setkey(lt47_ls, sid)
+setkey(lt47_ls, day, sid)
 
 message("*** Removing low-quality samples")
 lt47_ls <- lt47_ls[!(sid %in% c(15, 16))]
@@ -57,7 +59,7 @@ message("*** Translating lineage sizes from #reads to #cells")
 reads_per_cell <- lt47_ls[, {
   f <- density(log10(reads))
   list(reads.per.cell=10^(f$x[which.max(f$y)]))
-}, keyby=.(sid, day)]
+}, keyby=.(day, sid)]
 
 lt47_ls_cells <- lt47_ls[reads_per_cell, {
   list(day=day,
@@ -65,15 +67,10 @@ lt47_ls_cells <- lt47_ls[reads_per_cell, {
 }, keyby=.EACHI]
 
 message("*** Estimating PCR and sequencing parameters")
-sequencing <- lt47_ls[, {
-  # Estimate parameters for each sample
-  p <- .SD[, list(library_size=sum(reads),
-                  phantom_threshold=min(reads)),
-           , by="sid"]
-  # Compute median across all samples for a specific day
-  p[, list(library_size=signif(round(median(library_size)), 2),
-           phantom_threshold=round(median(phantom_threshold))) ]
-}, by=.(day)]
+sequencing <- lt47_ls[, list(
+  library_size=sum(reads),
+  phantom_threshold=min(reads)
+), keyby=.(day, sid)]
 # Compute PCR efficiency from day-0 samples
 sequencing[, pcr_efficiency := {
   lt47_ls[day==0][, {
@@ -84,9 +81,12 @@ sequencing[, pcr_efficiency := {
 }]
 
 message("*** Constructing lt47 dataset object")
-lt47 <- list(organoidsizes=h9_organoidsizes,
-             lineagesizes=lt47_ls_cells,
-             sequencing=sequencing)
+lt47 <- structure(list(organoidsizes=h9_organoidsizes,
+                       lineagesizes=lt47_ls_cells,
+                       sequencing=sequencing,
+                       unit=as.name("cells"),
+                       groups=character()),
+                  class="LTData")
 
 message("*** Saving lt47 to data/lt47.RData")
 save(lt47, file="data/lt47.RData", version=2)
