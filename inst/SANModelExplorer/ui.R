@@ -77,7 +77,10 @@ fluidPage(
                                              htmlOutput("phantom_threshold_auto_message")))
                  )
         ),
-        tabPanel("Parameter Sets",
+        tabPanel("Data & Parameter Sets",
+                 fluidRow(column(width=6,
+                                 selectInput("datagroup", label="Group", width="100%",
+                                             selected=character(0), choices=character(0)))),
                  fluidRow(column(width=6,
                                  selectInput("loadfrom", label="Use parameter set", width="100%",
                                              selected=character(0), choices=c("select set to load"="", character(0))))),

@@ -104,28 +104,56 @@ are.rates.identical <- function(r1, r2) {
 
 # Server logic
 function(input, output, session) {
+    if (length(DATASET$groups) > 0) {
+        DATAGROUPS <- DATASET$lineagesizes[, list(paste0(names(.BY), "=", lapply(.BY, as.character),
+                                                         collapse=" "))
+                                           , by=eval(DATASET$groups)]
+        DATAGROUPS.LABELCOL <- colnames(DATAGROUPS)[ncol(DATAGROUPS)]
+        setkeyv(DATAGROUPS, DATAGROUPS.LABELCOL)
+        updateSelectInput(session, "datagroup",
+                          choices=DATAGROUPS[, DATAGROUPS.LABELCOL, with=FALSE])
+    } else {
+        # TODO: Hide dataset browser
+    }
+    
+    dataset <- reactive({
+        if (length(DATASET$groups) > 0) {
+            datagroup <- if ((length(input$datagroup) == 1) && (input$datagroup != ""))
+                input$datagroup
+            else
+                DATAGROUPS[1, DATAGROUPS.LABELCOL, with=FALSE]
+            groupkey <- DATAGROUPS[list(datagroup), DATASET$groups, with=FALSE]
+            message("Switching to data group `", datagroup, "`",
+                    "using subset " ,(paste0(names(groupkey), "=",
+                                             lapply(groupkey, as.character),
+                                             collapse=", ")))
+            do.call(subset, c(list(DATASET), groupkey))
+        } else 
+            DATASET
+    })
+    
     dataset_lineagesize_expr <- reactive({
-        if ("cells" %in% names(DATASET$lineagesizes))
+        if ("cells" %in% names(dataset()$lineagesizes))
             expression(cells)
-        else if ("reads" %in% names(DATASET$lineagesizes))
+        else if ("reads" %in% names(dataset()$lineagesizes))
             expression(reads)
         else
             stop("lineagesizes must contain column 'cells' or 'reads'")
     })
     
     dataset_nlineages <- reactive({
-        DATASET$lineagesizes[, list(nlineages=as.integer(sum(eval(dataset_lineagesize_expr()) > 0)))
-                             , keyby=.(day, sid)]
+        dataset()$lineagesizes[, list(nlineages=as.integer(sum(eval(dataset_lineagesize_expr()) > 0)))
+                               , keyby=.(day, sid)]
     })
     
     dataset_ranksize <- reactive({
-        rank_size(DATASET$lineagesizes[, list(sid, day, size=eval(dataset_lineagesize_expr()))])
+        rank_size(dataset()$lineagesizes[, list(sid, day, size=eval(dataset_lineagesize_expr()))])
     })
     
     dataset_logsize <- reactive({
-        DATASET$lineagesizes[, list(sid, log_size=log10(eval(dataset_lineagesize_expr())))
-                             , keyby=.(day, sid)]
-    })
+        dataset()$lineagesizes[, list(sid, log_size=log10(eval(dataset_lineagesize_expr())))
+                               , keyby=.(day, sid)]
+    })  
 
     # The rates table set programmatically
     # It seems that even though output$rates consumes output_rates(), updating
@@ -200,9 +228,9 @@ function(input, output, session) {
     observeEvent(Tfinal(), {
         # Update day_lsd
         sel <- input$day_lsd
-        choices <- sort(unique(c(DATASET$lineagesizes$day, Tfinal())))
+        choices <- sort(unique(c(dataset()$lineagesizes$day, Tfinal())))
         if ((length(sel) < 1) || is.na(sel) || (sel == ""))
-            sel <- max(DATASET$lineagesizes$day, na.rm=TRUE)
+            sel <- max(dataset()$lineagesizes$day, na.rm=TRUE)
         if (!(sel %in% choices))
             sel <- choices[length(choices)]
         updateSelectInput(session, "day_lsd", choices=choices, selected=sel)
@@ -295,10 +323,10 @@ function(input, output, session) {
     # PCR efficiency parameter
     pcr_efficiency_manual_or_auto <- reactive({
         if (!is.na(input$pcr_efficiency) && (input$pcr_efficiency >= 0) && (input$pcr_efficiency <= 1)) {
-            eff <- DATASET$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
+            eff <- dataset()$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- DATASET$sequencing[, list(pcr_efficiency=median(pcr_efficiency)), keyby=day]
+            eff <- dataset()$sequencing[, list(pcr_efficiency=median(pcr_efficiency)), keyby=day]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -312,10 +340,10 @@ function(input, output, session) {
     # Sequencing library size parameter
     library_size_manual_or_auto <- reactive({
         if (!is.na(input$library_size) && (input$library_size > 0)) {
-            ls <- DATASET$sequencing[, list(library_size=as.numeric(input$library_size)), keyby=day]
+            ls <- dataset()$sequencing[, list(library_size=as.numeric(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- DATASET$sequencing[, list(library_size=round(median(library_size))), keyby=day]
+            ls <- dataset()$sequencing[, list(library_size=round(median(library_size))), keyby=day]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -334,10 +362,10 @@ function(input, output, session) {
     # Sequencing read-count threshold parameter
     phantom_threshold_manual_or_auto <- reactive({
         if (!is.na(input$phantom_threshold) && (input$phantom_threshold > 0)) {
-            th <- DATASET$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
+            th <- dataset()$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  DATASET$sequencing[, list(phantom_threshold=round(median(phantom_threshold))), keyby=day]
+            th <-  dataset()$sequencing[, list(phantom_threshold=round(median(phantom_threshold))), keyby=day]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
@@ -373,9 +401,9 @@ function(input, output, session) {
         } else NULL
     })
     san_stochastic_results_size_expr <- reactive({
-        if ("cells" %in% names(DATASET$lineagesizes))
+        if ("cells" %in% names(dataset()$lineagesizes))
             expression(R/reads_per_cell)
-        else if ("reads" %in% names(DATASET$lineagesizes))
+        else if ("reads" %in% names(dataset()$lineagesizes))
             expression(R)
         else
             stop("lineagesizes must contain column 'cells' or 'reads'")
@@ -593,8 +621,8 @@ function(input, output, session) {
 
         # Plot results
         p <- ggplot(data=r, aes(x=day)) +
-            stat_summary(data=DATASET$organoidsizes, aes(y=cells, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
-            stat_summary(data=DATASET$organoidsizes, aes(y=cells, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=dataset()$organoidsizes, aes(y=cells, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
+            stat_summary(data=dataset()$organoidsizes, aes(y=cells, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(aes(y=C, col='mod.C', linetype='mod.ana'), size=LWD2) +
             geom_line(aes(y=S, col='mod.S', linetype='mod.ana'), size=LWD) +
             geom_line(aes(y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
