@@ -1,14 +1,14 @@
 #' Compute rank-size table from a table with observed lineage sizes
 #' 
 #' @param data a `data.table`
-#' @param key the name(s) of a set of columns of `data` which define the group within which sizes are ranked
+#' @param groups the name(s) of a set of columns of `data` which define the group within which sizes are ranked
 #' @param size the name of a column of `data` containing the lineage sizes
 #' @return a `data.table` containing the grouping columns, `rank` (lineage size rank) and `size` (lineage size)
-rank_size <- function(data, key=c("day", "sid")) {
+rank_size <- function(data, groups=c("day", "sid")) {
   r <- data[, {
     .SD[order(size, decreasing=TRUE)][, list(rank=1:.N, size)]
-  }, by=key]
-  setkeyv(r, c(key, "rank"))
+  }, by=groups]
+  setkeyv(r, c(groups, "rank"))
   r
 }
 
