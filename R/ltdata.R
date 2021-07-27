@@ -62,7 +62,7 @@ normalize_library_sizes <- function(lt, ...) UseMethod("normalize_library_sizes"
 #' Subset of lineage tracing data
 #' 
 #' @export
-`[.LTData`  <- function(lt, ...) {
+subset.LTData  <- function(lt, ...) {
   # Convert arguments to index list and then to filter expression
   idx <- list(...)
   f <- Reduce(function(e, p) substitute(e & p, list2env(list(e=e, p=p))),
@@ -75,6 +75,11 @@ normalize_library_sizes <- function(lt, ...) UseMethod("normalize_library_sizes"
                         groups=lt$groups),
                    class="LTData"))
 }
+
+#' Subset of lineage tracing data
+#' 
+#' @export
+`[.LTData` <- subset.LTData
 
 #' Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)
 #' 
