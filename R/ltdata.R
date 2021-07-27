@@ -196,7 +196,7 @@ normalize_library_sizes.LTData.scale <- function(lt) {
     # The phantom threshold is the *maximum* across replicates, after taking the
     # library size scaling that happens below into account. This ensures that we
     # only move the threshold *upwards* when we re-apply the new threshold below.
-    phantom_threshold.max <- max(ceiling(phantom_threshold * library_size.min / library_size))
+    phantom_threshold.max <- max(ceiling(phantom_threshold * (library_size.min / library_size)))
     # Return new per-sample sequencing parameters
     list(sid=sid,
          library_size=library_size.min,
@@ -215,7 +215,7 @@ normalize_library_sizes.LTData.scale <- function(lt) {
       stop("missing sequencing parameters for sample ", paste(names(.BY), "=", as.character(.BY), collapse=","))
     
     # Scale read counts
-    reads.norm <- round(reads * seq.norm$library_size / seq$library_size)
+    reads.norm <- round(as.numeric(reads) * (seq.norm$library_size / seq$library_size))
     # Re-apply phantom threshold
     ifelse(reads.norm >= seq.norm$phantom_threshold, reads.norm, 0)
   }, keyby=c(lt$groups, "day", "sid")]

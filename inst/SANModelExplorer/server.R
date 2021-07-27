@@ -312,7 +312,7 @@ function(input, output, session) {
     # Sequencing library size parameter
     library_size_manual_or_auto <- reactive({
         if (!is.na(input$library_size) && (input$library_size > 0)) {
-            ls <- DATASET$sequencing[, list(library_size=(input$library_size)), keyby=day]
+            ls <- DATASET$sequencing[, list(library_size=as.numeric(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
             ls <- DATASET$sequencing[, list(library_size=round(median(library_size))), keyby=day]
