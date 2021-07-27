@@ -4,7 +4,7 @@
 \alias{san_model_explorer}
 \title{Runs the SAN model explorer app}
 \usage{
-san_model_explorer(location.parametersets = ".")
+san_model_explorer(dataset, location.parametersets = ".")
 }
 \description{
 Runs the SAN model explorer app
