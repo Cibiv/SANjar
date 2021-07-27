@@ -18,7 +18,7 @@ fluidPage(
         tabPanel("Rates & Deterministic Model",
                  fluidRow(column(width=6,
                                  tags$label(class="control-label", "Rates"),
-                                 rHandsontableOutput("rates", width="100%"),
+                                 rHandsontableOutput("rates", width="99%"),
                                  helpText(HTML("At each time <i>t</i> and for each rate (i.e. column), the first ",
                                           "non-empty value whose <i>T</i><sub>max</sub> is larger than <i>t</i> applies, ",
                                           "or zero if no such value exists. Empty cells thus effectively contain the ",
