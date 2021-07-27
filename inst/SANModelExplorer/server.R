@@ -298,7 +298,7 @@ function(input, output, session) {
             eff <- DATASET$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- DATASET$sequencing[, list(pcr_efficiency), keyby=day]
+            eff <- DATASET$sequencing[, list(pcr_efficiency=median(pcr_efficiency)), keyby=day]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -315,7 +315,7 @@ function(input, output, session) {
             ls <- DATASET$sequencing[, list(library_size=(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- DATASET$sequencing[, list(library_size), keyby=day]
+            ls <- DATASET$sequencing[, list(library_size=round(median(library_size))), keyby=day]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -337,7 +337,7 @@ function(input, output, session) {
             th <- DATASET$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  DATASET$sequencing[, list(phantom_threshold), keyby=day]
+            th <-  DATASET$sequencing[, list(phantom_threshold=round(median(phantom_threshold))), keyby=day]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
@@ -360,15 +360,15 @@ function(input, output, session) {
             # and the library size. The resulting table has the additional column
             # "R" containing the simulated read count.
             r <- (san_stochastic_results()
-                [total_sizes, on="day"]
-                [pcr_efficiency_manual_or_auto(), on="day"]
-                [library_size_manual_or_auto(), on="day"]
+                [total_sizes, on="day", nomatch=NULL]
+                [pcr_efficiency_manual_or_auto(), on="day", nomatch=NULL]
+                [library_size_manual_or_auto(), on="day", nomatch=NULL]
                 [, list(
                     dt, lid, S, A, N,
                     R=seqsim(C, reads.target=library_size[1], efficiency=pcr_efficiency[1]),
                     reads_per_cell=library_size[1]/sum(C)
-                ), by=.(sid, day)])
-            setkey(r, sid, day, lid)
+                ), by=.(day, sid)])
+            setkey(r, day, sid, lid)
             r
         } else NULL
     })
