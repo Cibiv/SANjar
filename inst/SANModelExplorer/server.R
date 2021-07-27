@@ -415,7 +415,7 @@ function(input, output, session) {
             c(SAN.PARAMS, list(name=input$loadfrom))
         }))
     })
-    observeEvent(parameterset.loaded, {
+    observeEvent(parameterset.loaded(), {
         # Update parameter values
         message("Parameter set loaded, updating UI")
         ps <- parameterset.loaded()
@@ -507,7 +507,7 @@ function(input, output, session) {
                 footer = modalButton("OK")
             ))
         })
-        parameterset.loaded <<- c(SAN.PARAMS, list(name=input$saveas))
+        parameterset.loaded(c(SAN.PARAMS, list(name=input$saveas)))
         # Clear saveas filename after saving
         updateTextInput(session, "saveas", value="")
         # Indicate the just-saved parameter set as being currently loaded
