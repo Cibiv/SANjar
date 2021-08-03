@@ -381,28 +381,26 @@ function(input, output, session) {
     san_stochastic_results_with_pcr <- reactive({
         if (!is.null(san_stochastic_results())) {
             message("Simulating PCR and sequencing")
-            # Compute total number of cells in each simulated sample
-            total_sizes <- san_stochastic_results()[, list(C.total=sum(as.numeric(C))), keyby=day]
             # Simulate read counts under the gwpcR PCR model
             # The sequencing depth is computed from the total number of cells,
             # and the library size. The resulting table has the additional column
             # "R" containing the simulated read count.
             r <- (san_stochastic_results()
-                [total_sizes, on="day", nomatch=NULL]
                 [pcr_efficiency_manual_or_auto(), on="day", nomatch=NULL]
                 [library_size_manual_or_auto(), on="day", nomatch=NULL]
                 [, list(
-                    dt, lid, S, A, N,
+                    dt, lid, S, A, N, C,
                     R=seqsim(C, reads.target=library_size[1], efficiency=pcr_efficiency[1]),
                     reads_per_cell=library_size[1]/sum(C)
                 ), by=.(day, sid)])
+            r[, C.obs := R / reads_per_cell]
             setkey(r, day, sid, lid)
             r
         } else NULL
     })
-    san_stochastic_results_size_expr <- reactive({
+    san_stochastic_results_lineagesize_expr <- reactive({
         if ("cells" %in% names(dataset()$lineagesizes))
-            expression(R/reads_per_cell)
+            expression(C.obs)
         else if ("reads" %in% names(dataset()$lineagesizes))
             expression(R)
         else
@@ -418,7 +416,8 @@ function(input, output, session) {
     })
     san_stochastic_ranksize_with_pcr_filtered <- reactive({
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            rank_size(san_stochastic_results_with_pcr_filtered()[, list(sid, day, size=eval(san_stochastic_results_size_expr()))])
+            rank_size(san_stochastic_results_with_pcr_filtered()[, list(
+                sid, day, size=eval(san_stochastic_results_lineagesize_expr()))])
         } else NULL
     })
 
@@ -756,7 +755,7 @@ function(input, output, session) {
         # Simulate PCR+Sequencing
         log_size.model_pcr <-  if (!is.null(san_stochastic_results_with_pcr_filtered())) {
             san_stochastic_results_with_pcr_filtered()[day==input$day_lsd, list(
-                sid, log_size=log10(R)
+                sid, log_size=log10(eval(san_stochastic_results_lineagesize_expr()))
             )]
         } else data.table()
 
