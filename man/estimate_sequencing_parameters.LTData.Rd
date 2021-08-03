@@ -2,10 +2,15 @@
 % Please edit documentation in R/ltdata.R
 \name{estimate_sequencing_parameters.LTData}
 \alias{estimate_sequencing_parameters.LTData}
-\title{Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)}
+\title{Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, read_per_cell)}
 \usage{
-\method{estimate_sequencing_parameters}{LTData}(lt, pcr_efficiency = NA, molecules = 1)
+\method{estimate_sequencing_parameters}{LTData}(
+  lt,
+  pcr_efficiency = NA,
+  molecules = 1,
+  replace = FALSE
+)
 }
 \description{
-Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)
+Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, read_per_cell)
 }

@@ -2,10 +2,10 @@
 % Please edit documentation in R/ltdata.R
 \name{normalize_library_sizes}
 \alias{normalize_library_sizes}
-\title{Normalize lineage sizes within each sample group to the same sequencing library size}
+\title{Normalize library sizes within each sample group to the same sequencing library size}
 \usage{
 normalize_library_sizes(lt, ...)
 }
 \description{
-Normalize lineage sizes within each sample group to the same sequencing library size
+Normalize library sizes within each sample group to the same sequencing library size
 }

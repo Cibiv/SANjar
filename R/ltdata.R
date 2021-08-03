@@ -9,30 +9,68 @@
 #' @export
 LTData <- function(lineagesizes=NULL, organoidsizes=NULL, sequencing=NULL, unit="reads", groups=character()) {
   # Sanitize arguments
-  if (!is.null(organoidsizes)) {
-    organoidsizes <- as.data.table(organoidsizes)
-    if (!all(c(groups, "day", "sid", "cells") %in% colnames(organoidsizes)))
-      stop("organoidsizes table must contain the columns ", paste0(c(groups, "day", "sid", "cells"), collapse=", "))
-    setkeyv(organoidsizes, c(groups, "day", "sid"))
-  }
-  
   unit <- match.arg(unit, c("cells", "reads"))
   
+  # Validate lineagesizes table
   if (!is.null(lineagesizes)) {
+    # Check table layout
     lineagesizes <- as.data.table(lineagesizes)
     if (!all(c(groups, "day", "sid", unit) %in% colnames(lineagesizes)))
       stop("lineagesizes table must contain the columns ", paste0(c(groups, "day", "sid", unit), collapse=", "))
     setkeyv(lineagesizes, c(groups, "day", "sid"))
+    # Extract list of samples
+    samples <- lineagesizes[, list(dummy=0), keyby=c(groups, "day", "sid")]
   }
-
+  
+  # Validate organoidsizes table
+  if (!is.null(organoidsizes)) {
+    # Check table layout
+    organoidsizes <- as.data.table(organoidsizes)
+    if (!all(c(groups, "day", "cells") %in% colnames(organoidsizes)))
+      stop("organoidsizes table must contain the columns ", paste0(c(groups, "day", "cells"), collapse=", "))
+    setkeyv(organoidsizes, c(groups, "day"))
+    
+    # Check contents
+    if (length(groups) > 0) {
+      organoidsizes[samples, {
+        if (.N < 1)
+          stop("organoidsizes table is missing an entry for ",
+               paste0(names(.BY), "=", .BY, collapse=", "))
+        NULL
+      }, by=.EACHI, nomatch=NA, on=groups]
+    }
+  }
+  
+  # Validate sequencing table
   if (!is.null(sequencing)) {
+    # Check table layout
     sequencing <- as.data.table(sequencing)
-    if (!all(c(groups, "day", "sid", "library_size", "pcr_efficiency", "phantom_threshold") %in%
+    if (!all(c(groups, "day", "sid") %in%
              colnames(sequencing)))
       stop("sequencing parameter table must contain the columns ",
-           paste0(c(groups, "day", "sid", "library_size", "pcr_efficiency", "phantom_threshold"),
+           paste0(c(groups, "day", "sid"),
                   collapse=", "))
     setkeyv(sequencing, c(groups, "day", "sid"))
+    
+    # Check contents
+    sequencing[samples, {
+      if (.N < 1)
+        stop("sequencing table is missing an entry for ",
+             paste0(names(.BY), "=", .BY, collapse=", "))
+      if (.N > 1)
+        stop("sequencing table contains multiple entries for ",
+             paste0(names(.BY), "=", .BY, collapse=", "))
+      NULL
+    }, by=.EACHI, nomatch=NA]
+  } else {
+    # Create sequencing parameter table
+    sequencing <- lineagesizes[, list(0), keyby=c(groups, "day", "sid")][, -length(groups)-3, with=FALSE]
+  }
+
+  # Add missing columns to sequencing table
+  for(col in c("library_size", "pcr_efficiency", "phantom_threshold", "reads_per_cell")) {
+    if (!(col %in% names(sequencing)))
+      sequencing[, eval(col) := NA_real_]
   }
   
   # Return LTData object
@@ -44,20 +82,30 @@ LTData <- function(lineagesizes=NULL, organoidsizes=NULL, sequencing=NULL, unit=
                     class="LTData"))
 }
 
-#' Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)
+#' Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, reads per cell)
 #' 
 #' @export
 estimate_sequencing_parameters <- function(lt, ...) UseMethod("estimate_sequencing_parameters")
+
+#' Re-estimate the number of reads per cell without relying on the total organoid sizes
+#' 
+#' @export
+estimate_reads_per_cell <- function(lt, ...) UseMethod("estimate_reads_per_cell")
 
 #' Infer the total number of cells each sub-library of an organoid corresponds to
 #'
 #' @export
 partial_organoid_sizes <- function(partial, ...) UseMethod("partial_organoid_sizes")
 
-#' Normalize lineage sizes within each sample group to the same sequencing library size
+#' Normalize library sizes within each sample group to the same sequencing library size
 #' 
 #' @export
 normalize_library_sizes <- function(lt, ...) UseMethod("normalize_library_sizes")
+
+#' Transform lineage sizes from (relative) read counts into (absolute) cells counts
+#' 
+#' @export
+absolute_lineage_sizes <- function(lt, ...) UseMethod("absolute_lineage_sizes")
 
 #' Subset of lineage tracing data
 #' 
@@ -81,11 +129,11 @@ subset.LTData  <- function(lt, ...) {
 #' @export
 `[.LTData` <- subset.LTData
 
-#' Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)
+#' Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, read_per_cell)
 #' 
 #' @import gwpcR
 #' @export
-estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, molecules=1) {
+estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, molecules=1, replace=FALSE) {
   if (lt$unit == "cells")
     stop("sequencing parameter estimation requires read counts, not cell counts")
   
@@ -103,12 +151,65 @@ estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, molecul
     }
   }
   
-  # Determine each sample's library size and phantom threshopld
-  lt$sequencing <- lt$lineagesizes[, list(
+  # Copy sequencing parameter table before modifying it below
+  lt$sequencing <- copy(lt$sequencing)
+  
+  # Determine each sample's library size and phantom threshold and update sequencing table
+  seq <- lt$lineagesizes[, list(
     library_size=sum(reads),
     pcr_efficiency=pcr_efficiency,
     phantom_threshold=min(reads)
   ), keyby=c(lt$groups, "day", "sid")]
+  lt$sequencing[seq, library_size :=
+                  ifelse(is.na(library_size) | replace, i.library_size, library_size)      ]
+  lt$sequencing[seq, pcr_efficiency :=
+                  ifelse(is.na(pcr_efficiency) | replace, i.pcr_efficiency, pcr_efficiency)    ]
+  lt$sequencing[seq, phantom_threshold :=
+                  ifelse(is.na(phantom_threshold) | replace, i.phantom_threshold, phantom_threshold) ]
+
+  # Estimate the number of reads per cell from the total organoid size and library size
+  if (!is.null(lt$organoidsizes)) {
+    lt$sequencing[, reads_per_cell := {
+      # Fetch organoidsizes for current sample group
+      organoidsizes <- if(length(lt$groups) > 0)
+        lt$organoidsizes[.BY]
+      else
+        lt$organoidsizes
+      # Interpolate organoid sizes for current sample group
+      t <- organoidsizes[, list(logc=mean(log(cells))), by=.(day)]
+      logf <- approxfun(t$day, t$logc, rule=2)
+      f <- function(...) exp(logf(...))
+      # Return new reads_per_cell column
+      ifelse(is.na(reads_per_cell) | replace, library_size / f(day), reads_per_cell)
+    }, by=eval(lt$groups)]
+  }
+  
+  return(lt)
+}
+
+#' Re-estimate the number of reads per cell without relying on the total organoid sizes
+#' 
+#' @export
+estimate_reads_per_cell.LTData <- function(lt, method="singleton_mode") {
+  switch(match.arg(method, choices=c("singleton_mode")),
+         `singleton_mode`=estimate_reads_per_cell.LTData.singleton_mode(lt))
+}
+
+estimate_reads_per_cell.LTData.singleton_mode <- function(lt, replace=TRUE) {
+  if (lt$unit == "cells")
+    stop("reads per cell estimation requires read counts, not cell counts")
+  
+  # Copy sequencing parameter table before modifying it below
+  lt$sequencing <- copy(lt$sequencing)
+  
+  # Determine mode of log-lineagesizes, and assume these lineages represent
+  # single-cell lineages.
+  seq <- lt$lineagesizes[, {
+    f <- density(log10(reads))
+    list(reads_per_cell=10^(f$x[which.max(f$y)]))
+  }, keyby=c(lt$groups, "day", "sid")]
+  lt$sequencing[seq, reads_per_cell :=
+                  ifelse(is.na(reads_per_cell) | replace, i.reads_per_cell, reads_per_cell) ]
   
   return(lt)
 }
@@ -173,7 +274,7 @@ partial_organoid_sizes.LTData <- function(partial, whole, sublib) {
       }, by=.(day)]
     }, by=sublib]
   }, by=groups]
-  setkeyv(partial_organoidsizes, c(partial$groups, "day", "sid"))
+  setkeyv(partial_organoidsizes, c(partial$groups, "day"))
   
   partial$organoidsizes <- partial_organoidsizes
   return(partial)
@@ -188,8 +289,8 @@ normalize_library_sizes.LTData <- function(lt, method="scale") {
 }
 
 normalize_library_sizes.LTData.scale <- function(lt) {
-  if (is.null(lt$sequencing))
-    stop("LTData must contain sequencing parameter table to normalize library sizes, ",
+  if (any(is.na(lt$sequencing[, library_size])))
+    stop("LTData must contain valid library sizes in sequencing parameter table to normalize library sizes, ",
          "call estimate_sequencing_parameters first")
   
   # Determine library-size-normalized sequencing parameters 
@@ -206,7 +307,8 @@ normalize_library_sizes.LTData.scale <- function(lt) {
     list(sid=sid,
          library_size=library_size.min,
          pcr_efficiency=pcr_efficiency.med,
-         phantom_threshold=phantom_threshold.max)
+         phantom_threshold=phantom_threshold.max,
+         reads_per_cell=reads_per_cell * (library_size.min / library_size))
   }, by=c(lt$groups, "day")]
   setkeyv(sequencing.norm, c(lt$groups, "day", "sid"))
 
@@ -228,5 +330,24 @@ normalize_library_sizes.LTData.scale <- function(lt) {
   # Return updated LTData object
   lt$lineagesizes <- lineagesizes.norm
   lt$sequencing <- sequencing.norm
+  return(lt)
+}
+
+#' Transform lineage sizes from (relative) read counts into (absolute) cells counts
+#' 
+#' @export
+absolute_lineage_sizes.LTData <- function(lt) {
+  if (lt$unit == "cells")
+    stop("lineage lineages are already expressed in cells")
+  
+  # Copy lineagesizes before modifying it below
+  lt$lineagesizes <- copy(lt$lineagesizes)
+  
+  # Convert read count to cell count using the estimated number of reads per cell
+  lt$lineagesizes[lt$sequencing, cells := reads / reads_per_cell]
+  
+  # Lineage size units are now cells, not reads
+  lt$unit <- "cells"
+  
   return(lt)
 }

@@ -2,10 +2,10 @@
 % Please edit documentation in R/ltdata.R
 \name{estimate_sequencing_parameters}
 \alias{estimate_sequencing_parameters}
-\title{Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)}
+\title{Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, reads per cell)}
 \usage{
 estimate_sequencing_parameters(lt, ...)
 }
 \description{
-Estimate sequencing parameters (library size, PCR efficiency, phantom threshold)
+Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, reads per cell)
 }
