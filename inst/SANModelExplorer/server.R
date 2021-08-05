@@ -7,6 +7,7 @@ library(scales)
 # Parameters:
 #  LOCATION.PARAMETERSETS
 #  DEFAULT.PARAMETERSET
+#  DATASET
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
@@ -104,55 +105,87 @@ are.rates.identical <- function(r1, r2) {
 
 # Server logic
 function(input, output, session) {
-    if (length(DATASET$groups) > 0) {
-        DATAGROUPS <- DATASET$lineagesizes[, list(paste0(names(.BY), "=", lapply(.BY, as.character),
-                                                         collapse=" "))
-                                           , by=eval(DATASET$groups)]
-        DATAGROUPS.LABELCOL <- colnames(DATAGROUPS)[ncol(DATAGROUPS)]
-        setkeyv(DATAGROUPS, DATAGROUPS.LABELCOL)
-        updateSelectInput(session, "datagroup",
-                          choices=DATAGROUPS[, DATAGROUPS.LABELCOL, with=FALSE])
-    } else {
-        # TODO: Hide dataset browser
-    }
-    
-    dataset <- reactive({
-        if (length(DATASET$groups) > 0) {
-            datagroup <- if ((length(input$datagroup) == 1) && (input$datagroup != ""))
-                input$datagroup
-            else
-                DATAGROUPS[1, DATAGROUPS.LABELCOL, with=FALSE]
-            groupkey <- DATAGROUPS[list(datagroup), DATASET$groups, with=FALSE]
-            message("Switching to data group `", datagroup, "`",
-                    "using subset " ,(paste0(names(groupkey), "=",
-                                             lapply(groupkey, as.character),
-                                             collapse=", ")))
-            do.call(subset, c(list(DATASET), groupkey))
-        } else 
-            DATASET
-    })
-    
-    dataset_lineagesize_expr <- reactive({
-        if ("cells" %in% names(dataset()$lineagesizes))
-            expression(cells)
-        else if ("reads" %in% names(dataset()$lineagesizes))
-            expression(reads)
+    # Datagroups
+    # Datasets can contain multiple groups of samples, distinguished by
+    # the group key column(s) DATASET$groups. dataset_groups() lists the
+    # available groups and their label (last column and key).
+    dataset_groups <- reactiveVal()
+    observeEvent(dataset_groups(), {
+        labels <- dataset_groups()[, key(dataset_groups()), with=FALSE]$V1
+        updateSelectInput(session, "datagroup", choices=labels)
+        if (!is.null(labels) && (length(labels) > 0))
+            enable("datagroup")
         else
+            disable("datagroup")
+    })
+    dataset_groups(local({
+        if (length(DATASET$groups) > 0) {
+            # Create table listing groups and their label (first column and key)
+            dg <- DATASET$lineagesizes[, list(paste0(names(.BY), "=", lapply(.BY, as.character),
+                                                     collapse=" "))
+                                       , by=eval(DATASET$groups) ]
+            k <- length(DATASET$groups)
+            dg <- dg[, colnames(dg)[c(k+1, 1:k)], with=FALSE]
+            setkeyv(dg, colnames(dg)[1])
+            dg
+        } else {
+            # Dataset has no groups
+            NULL
+        }
+    }))
+
+    # Lineagesize unit
+    dataset_lineagesize_expr <- reactiveVal()
+    observeEvent(DATASET, {
+        if (DATASET$unit == "cells") {
+            updateCheckboxInput(session, "stochastic_lsd_normlibsize", value=FALSE)
+            disable("stochastic_lsd_normlibsize")
+            dataset_lineagesize_expr(expression(cells))
+        } else if (DATASET$unit == "reads") {
+            enable("stochastic_lsd_normlibsize")
+            dataset_lineagesize_expr(expression(reads))
+        } else
             stop("lineagesizes must contain column 'cells' or 'reads'")
     })
-    
-    dataset_nlineages <- reactive({
-        dataset()$lineagesizes[, list(nlineages=as.integer(sum(eval(dataset_lineagesize_expr()) > 0)))
-                               , keyby=.(day, sid)]
+
+    # Dataset (after filtering down to a single group)
+    dataset_group <- reactive({
+        # Select group
+        group <- if (!is.null(dataset_groups())) {
+            # Translate lable to group key
+            groupkey <- if ((length(input$datagroup) == 1) && !is.null(input$datagroup) && (input$datagroup != ""))
+                dataset_groups()[list(input$datagroup), !1]
+            else
+                dataset_groups()[1, !1]
+            # Filter DATASET down to only the selected group
+            stopifnot(nrow(groupkey) == 1)
+            message("Selecting data group ",
+                    paste0(names(groupkey), "=", lapply(groupkey, as.character), collapse=", "))
+            do.call(subset, c(list(DATASET), groupkey))
+        } else
+            DATASET
+        # Normalize library sizes if lineage sizes are relative and normalization was requested
+        if ((DATASET$unit == "reads") && input$stochastic_lsd_normlibsize)
+            group <- SANjar::normalize_library_sizes(group, method="scale")
+        group
     })
-    
-    dataset_ranksize <- reactive({
-        rank_size(dataset()$lineagesizes[, list(sid, day, size=eval(dataset_lineagesize_expr()))])
+    dataset_tfinal <- reactive(({
+        dataset_group()$lineagesizes[, max(day)]
+    }))
+    dataset_group_nlineages <- reactive({
+        dataset_group()$lineagesizes[, list(
+            nlineages=sum(eval(dataset_lineagesize_expr()) > 0)
+        ), keyby=.(day, sid)]
     })
-    
-    dataset_logsize <- reactive({
-        dataset()$lineagesizes[, list(sid, log_size=log10(eval(dataset_lineagesize_expr())))
-                               , keyby=.(day, sid)]
+    dataset_group_ranksize <- reactive({
+        rank_size(dataset_group()$lineagesizes[, list(
+            sid, day, size=eval(dataset_lineagesize_expr())
+        )])
+    })
+    dataset_group_logsize <- reactive({
+        dataset_group()$lineagesizes[, list(
+            sid, log_size=log10(eval(dataset_lineagesize_expr()))
+        ), keyby=.(day, sid)]
     })  
 
     # The rates table set programmatically
@@ -228,9 +261,9 @@ function(input, output, session) {
     observeEvent(Tfinal(), {
         # Update day_lsd
         sel <- input$day_lsd
-        choices <- sort(unique(c(dataset()$lineagesizes$day, Tfinal())))
+        choices <- sort(unique(c(dataset_group()$lineagesizes$day, Tfinal())))
         if ((length(sel) < 1) || is.na(sel) || (sel == ""))
-            sel <- max(dataset()$lineagesizes$day, na.rm=TRUE)
+            sel <- max(dataset_group()$lineagesizes$day, na.rm=TRUE)
         if (!(sel %in% choices))
             sel <- choices[length(choices)]
         updateSelectInput(session, "day_lsd", choices=choices, selected=sel)
@@ -323,10 +356,10 @@ function(input, output, session) {
     # PCR efficiency parameter
     pcr_efficiency_manual_or_auto <- reactive({
         if (!is.na(input$pcr_efficiency) && (input$pcr_efficiency >= 0) && (input$pcr_efficiency <= 1)) {
-            eff <- dataset()$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
+            eff <- dataset_group()$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- dataset()$sequencing[, list(pcr_efficiency=median(pcr_efficiency)), keyby=day]
+            eff <- dataset_group()$sequencing[, list(pcr_efficiency=median(pcr_efficiency)), keyby=day]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -340,10 +373,10 @@ function(input, output, session) {
     # Sequencing library size parameter
     library_size_manual_or_auto <- reactive({
         if (!is.na(input$library_size) && (input$library_size > 0)) {
-            ls <- dataset()$sequencing[, list(library_size=as.numeric(input$library_size)), keyby=day]
+            ls <- dataset_group()$sequencing[, list(library_size=as.numeric(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- dataset()$sequencing[, list(library_size=round(median(library_size))), keyby=day]
+            ls <- dataset_group()$sequencing[, list(library_size=round(median(library_size))), keyby=day]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -362,10 +395,10 @@ function(input, output, session) {
     # Sequencing read-count threshold parameter
     phantom_threshold_manual_or_auto <- reactive({
         if (!is.na(input$phantom_threshold) && (input$phantom_threshold > 0)) {
-            th <- dataset()$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
+            th <- dataset_group()$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  dataset()$sequencing[, list(phantom_threshold=round(median(phantom_threshold))), keyby=day]
+            th <-  dataset_group()$sequencing[, list(phantom_threshold=round(median(phantom_threshold))), keyby=day]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
@@ -399,9 +432,9 @@ function(input, output, session) {
         } else NULL
     })
     san_stochastic_results_lineagesize_expr <- reactive({
-        if ("cells" %in% names(dataset()$lineagesizes))
+        if (DATASET$unit == "cells")
             expression(C.obs)
-        else if ("reads" %in% names(dataset()$lineagesizes))
+        else if (DATASET$unit == "reads")
             expression(R)
         else
             stop("lineagesizes must contain column 'cells' or 'reads'")
@@ -620,8 +653,8 @@ function(input, output, session) {
 
         # Plot results
         p <- ggplot(data=r, aes(x=day)) +
-            stat_summary(data=dataset()$organoidsizes, aes(y=cells, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
-            stat_summary(data=dataset()$organoidsizes, aes(y=cells, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=dataset_group()$organoidsizes, aes(y=cells, col='exp.C'), fun=mean, geom="line", linetype="dashed", size=LWD) +
+            stat_summary(data=dataset_group()$organoidsizes, aes(y=cells, col='exp.C'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(aes(y=C, col='mod.C', linetype='mod.ana'), size=LWD2) +
             geom_line(aes(y=S, col='mod.S', linetype='mod.ana'), size=LWD) +
             geom_line(aes(y=A, col='mod.A', linetype='mod.ana'), size=LWD) +
@@ -689,7 +722,7 @@ function(input, output, session) {
         } else data.table()
         
         # Fetch experimental data
-        rank_size.experiment <- dataset_ranksize()[day==input$day_lsd]
+        rank_size.experiment <- dataset_group_ranksize()[day==input$day_lsd]
             
         # Abort if no data is available to plot
         if (nrow(rank_size.model) + nrow(rank_size.model_pcr) + nrow(rank_size.experiment) == 0)
@@ -706,7 +739,7 @@ function(input, output, session) {
             my_scale_log10(scale_y_log10, oob=oob_keep) +
             annotation_logticks(sides="bl") +
             xlab("rank") +
-            ylab("lineage size [norm. reads]") +
+            ylab(paste0("lineage size [", DATASET$unit, "]")) +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
@@ -760,7 +793,7 @@ function(input, output, session) {
         } else data.table()
 
         # Fetch experimental data
-        log_size.experiment <- dataset_logsize()[day==input$day_lsd]
+        log_size.experiment <- dataset_group_logsize()[day==input$day_lsd]
 
         # Legend overrides
         legend.override <- list(linetype=c(data="dashed", model="solid", `model+seq.`="solid"),
@@ -771,7 +804,7 @@ function(input, output, session) {
         p <- ggplot() +
             my_scale_log10_pretransformed(scale_x_continuous) +
             annotation_logticks(sides="b") +
-            xlab("lineage size [norm. reads]") +
+            xlab(paste0("lineage size [", DATASET$unit, "]")) +
             ylab("density") +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
@@ -840,8 +873,8 @@ function(input, output, session) {
         groups[length(groups)+1] <- "exp.obs"
         groups[length(groups)+1] <- "mod.all"
         p <- ggplot(data=NULL, aes(x=day, y=nlineages)) +
-            stat_summary(data=dataset_nlineages(), aes(col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
-            stat_summary(data=dataset_nlineages(), aes(col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
+            stat_summary(data=dataset_group_nlineages(), aes(col='exp.obs'), fun=mean, geom="line", size=LWD, linetype="dashed") +
+            stat_summary(data=dataset_group_nlineages(), aes(col='exp.obs'), fun.data=mean_sdl, geom="errorbar", width=0.8, size=LWD) +
             geom_line(data=lsd, aes(col='mod.all'), size=LWD)
         if (input$stochastic_nlineages_logy)
             p <- p +
