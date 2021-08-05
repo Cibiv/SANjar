@@ -302,11 +302,6 @@ function(input, output, session) {
             r
         } else NULL
     })
-    san_stochastic_ranksize <- reactive({
-        if (!is.null(san_stochastic_results())) {
-            rank_size(san_stochastic_results()[, list(sid, day, size=C)])
-        } else NULL
-    })
 
     p_cutoff_message <- reactive({
         # Compute expected values for S, A, N using the deterministic model
@@ -408,6 +403,35 @@ function(input, output, session) {
         if (!attr(th, "auto")) return("")
         paste0("est. from data, =", th[day==input$day_lsd, phantom_threshold],
                " for day ", input$day_lsd)
+    })
+    
+    # Scale cell counts 
+    san_stochastic_results_reads <- reactive({
+        if (!is.null(san_stochastic_results())) {
+            message("Scaling cell counts to make them comparable with reads")
+            # Translate cell counts to reads according to library size 
+            # In contrast to san_stochastic_results_with_pcr(), we don't
+            # actually introduce any stochasticity here, but simply adjust
+            # the scale. C.obs is therefore identical to C here.
+            r <- (san_stochastic_results()
+                  [pcr_efficiency_manual_or_auto(), on="day", nomatch=NULL]
+                  [library_size_manual_or_auto(), on="day", nomatch=NULL]
+                  [, list(
+                      dt, lid, S, A, N, C,
+                      R=as.numeric(C)*(library_size[1]/sum(C)),
+                      reads_per_cell=library_size[1]/sum(C)
+                  ), by=.(day, sid)])
+            r[, C.obs := C]
+            setkey(r, day, sid, lid)
+            r
+        } else NULL
+    })
+    
+    san_stochastic_ranksize <- reactive({
+        if (!is.null(san_stochastic_results_reads())) {
+            rank_size(san_stochastic_results_reads()[, list(
+                sid, day, size=eval(san_stochastic_results_lineagesize_expr()))])
+        } else NULL
     })
     
     # Simulate PCR+Sequencing
@@ -780,8 +804,8 @@ function(input, output, session) {
 
         # Simulate stochastic SAN model
         log_size.model <- if (input$stochastic_lsd_incpuremodel) {
-            san_stochastic_results()[(day==input$day_lsd) & (C > 0), list(
-                sid, log_size=log10(C)
+            san_stochastic_results_reads()[(day==input$day_lsd) & (C > 0), list(
+                sid, log_size=log10(eval(san_stochastic_results_lineagesize_expr()))
             )]
         } else data.table()
 
