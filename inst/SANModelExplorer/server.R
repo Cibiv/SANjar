@@ -172,6 +172,10 @@ function(input, output, session) {
     dataset_tfinal <- reactive(({
         dataset_group()$lineagesizes[, max(day)]
     }))
+    dataset_s0scale <- reactive({
+        f <- dataset_group()$organoidsizes[day==0, median(fraction)]
+        if (is.finite(f) && (f > 0)) f else 1.0
+    })
     dataset_group_nlineages <- reactive({
         dataset_group()$lineagesizes[, list(
             nlineages=sum(eval(dataset_lineagesize_expr()) > 0)
@@ -272,10 +276,21 @@ function(input, output, session) {
         updateSliderInput(session, "day_scellext", min=0, max=Tfinal()+1, value=Tfinal()+1)
     })
     
+    s0_message <- reactiveVal()
+    s0_actual <- reactive({
+        if (!input$s0_scale) {
+            s0_message("")
+            return(input$s0)
+        }
+        s0 <- ceiling(input$s0 * dataset_s0scale())
+        s0_message(paste0("Using s0=", s0, " (", signif(100*dataset_s0scale(), digits=2), "% of ", input$s0, ")"))
+        return(s0)
+    })
+    
     san_deterministic_results <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
-        if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
-            r <- san_deterministic(s0=input$s0, rates=input_rates(), samples_per_day=10)[, list(
+        if ((length(input_rates_list()) > 0) && (s0_actual() > 0)) {
+            r <- san_deterministic(s0=s0_actual(), rates=input_rates(), samples_per_day=10)[, list(
                 sid=-1, day=t,
                 S, A, N,
                 C=S+A+N
@@ -289,7 +304,7 @@ function(input, output, session) {
     # The result is a table with columns day, lid, S, A, N and C=S+A+N
     san_stochastic_results <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
-        if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
+        if ((length(input_rates_list()) > 0) && (s0_actual() > 0)) {
             message("Simulating the SAN model")
             rt <- copy(input_rates())
             # If the last Tmax in the rates table precedes Tfinal(), adjust
@@ -297,7 +312,7 @@ function(input, output, session) {
             if (rt[nrow(rt), Tmax] < Tfinal())
                 rt[nrow(rt), Tmax := Tfinal()]
             # Simulate model
-            r <- san_stochastic(L=input$s0, rates=rt, samples_per_day=1,
+            r <- san_stochastic(L=s0_actual(), rates=rt, samples_per_day=1,
                                 p_cutoff=as.numeric(input$p_cutoff))[, list(
                 sid=-1,
                 day=t,
@@ -311,7 +326,7 @@ function(input, output, session) {
 
     p_cutoff_message <- reactive({
         # Compute expected values for S, A, N using the deterministic model
-        mod.exp <- san_deterministic(s0=input$s0, rates=input_rates())
+        mod.exp <- san_deterministic(s0=s0_actual(), rates=input_rates())
         setkey(mod.exp, "t")
         # Compute the total S, A, N cell counts from the simulation results
         mod.sim <- san_stochastic_results()
@@ -626,6 +641,11 @@ function(input, output, session) {
         rhandsontable(output_rates(), useTypes=TRUE, search=FALSE, colHeaders=headers)
     })
 
+    # Message about s0 scaling 
+    output$s0_message <- renderUI({
+        helpText(HTML(s0_message()))
+    })
+    
     # Deterministic model dynamics
     output$deterministic_cellcounts <- renderPlot({
         message("Rendering deterministic cell counts plot")
