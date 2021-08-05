@@ -489,9 +489,11 @@ function(input, output, session) {
             return()
         }
         # Return if the selected file is already loaded
-        ps <- parameterset.loaded()
-        if (!is.null(ps) && is.character(ps$name) && (ps$name == input$loadfrom))
+        ps <- isolate(parameterset.loaded())
+        if (!is.null(ps) && is.character(ps$name) && (ps$name == input$loadfrom)) {
+            message("Parameter set ", input$loadfrom, " is already loaded")
             return()
+        }
         # Load file
         message("Loading parameter set ", input$loadfrom, " from ", parameterset.fullpath(input$loadfrom))
         parameterset.loaded(local({
@@ -500,19 +502,15 @@ function(input, output, session) {
         }))
     })
     observeEvent(parameterset.loaded(), {
+        ps <- parameterset.loaded()
+        if (is.null(ps))
+            return()
         # Update parameter values
         message("Parameter set loaded, updating UI")
-        ps <- parameterset.loaded()
         if (!is.null(ps$s0))
             updateNumericInput(session, "s0", value=ps$s0)
         if (!is.null(ps$rates))
             updateRateInput(session, value=ps$rates, alwaysUpdateOutputAsWell=TRUE)
-        if (!is.null(ps$pcr_efficiency))
-            updateNumericInput(session, "pcr_efficiency", value=ps$pcr_efficiency)
-        if (!is.null(ps$library_size))
-            updateNumericInput(session, "library_size", value=ps$library_size)
-        if (!is.null(ps$phantom_threshold))
-            updateNumericInput(session, "phantom_threshold", value=ps$phantom_threshold)
     })
     # Load parameter set "default" on startup
     if (is.character(DEFAULT.PARAMETERSET))
@@ -528,57 +526,30 @@ function(input, output, session) {
     
     # If a loaded parameter set is changed, don't show it as selected anymore
     observeEvent(input$s0, {
-        if (is.null(isolate(parameterset.loaded()$name)))
+        ps <- isolate(parameterset.loaded())
+        if (is.null(ps$name))
             return()
-        if (is.null(isolate(parameterset.loaded()$s0)) || is.samevalue(isolate(parameterset.loaded()$s0), input$s0))
+        if (is.null(ps$s0) || is.samevalue(ps$s0, input$s0))
             return()
         message("Parameter set has been modified (s0 changed), no longer matches ", parameterset.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
+        parameterset.loaded(NULL)
     })
     observeEvent(input$rates, {
-        if (is.null(isolate(parameterset.loaded()$name)))
+        ps <- isolate(parameterset.loaded())
+        if (is.null(ps$name))
             return()
-        if (is.null(isolate(parameterset.loaded()$rates)) || are.rates.identical(isolate(parameterset.loaded()$rates),
-                                                                                 as.data.table(hot_to_r(input$rates))))
+        if (is.null(ps$rates) || are.rates.identical(ps$rates, as.data.table(hot_to_r(input$rates))))
             return()
         message("Parameter set has been modified (rates changed), no longer matches ", parameterset.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
-    })
-    observeEvent(input$pcr_efficiency, {
-        if (is.null(isolate(parameterset.loaded()$name)))
-            return()
-        if (is.null(isolate(parameterset.loaded()$pcr_efficiency)) || is.samevalue(isolate(parameterset.loaded()$pcr_efficiency),
-                                                                                   input$pcr_efficiency))
-            return()
-        message("Parameter set has been modified (pcr_efficiency changed), no longer matches ", parameterset.loaded()$name)
-        updateSelectInput(session, "loadfrom", selected=character(0))
-    })
-    observeEvent(input$library_size, {
-        if (is.null(isolate(parameterset.loaded()$name)))
-            return()
-        if (is.null(isolate(parameterset.loaded()$library_size)) || is.samevalue(isolate(parameterset.loaded()$library_size),
-                                                                                 input$library_size))
-            return()
-        message("Parameter set has been modified (library_size changed), no longer matches ", parameterset.loaded()$name)
-        updateSelectInput(session, "loadfrom", selected=character(0))
-    })
-    observeEvent(input$phantom_threshold, {
-        if (is.null(isolate(parameterset.loaded()$name)))
-            return()
-        if (is.null(isolate(parameterset.loaded()$phantom_threshold)) || is.samevalue(isolate(parameterset.loaded()$phantom_threshold),
-                                                                                      input$phantom_threshold))
-            return()
-        message("Parameter set has been modified (phantom_threshold changed), no longer matches ", isolate(parameterset.loaded()$name))
-        updateSelectInput(session, "loadfrom", selected=character(0))
+        parameterset.loaded(NULL)
     })
 
     # Save the current set of parameters
     parameterset.saveas <- function() {
         SAN.PARAMS <- list(rates=as.data.table(hot_to_r(input$rates)),
-                           s0=input$s0,
-                           pcr_efficiency=input$pcr_efficiency,
-                           library_size=input$library_size,
-                           phantom_threshold=input$phantom_threshold)
+                           s0=input$s0)
         tryCatch({
             if (!grepl(FILENAME.PATTERN, input$saveas))
                 stop("invalid filename")
