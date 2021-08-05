@@ -39,6 +39,11 @@ LTData <- function(lineagesizes=NULL, organoidsizes=NULL, sequencing=NULL, unit=
         NULL
       }, by=.EACHI, nomatch=NA, on=groups]
     }
+    
+    # Add missing columns to organoidsizes table
+    if (!("fraction" %in% names(organoidsizes))) {
+      organoidsizes[, fraction := 1.0]
+    }
   }
   
   # Validate sequencing table
@@ -237,7 +242,7 @@ partial_organoid_sizes.LTData <- function(partial, whole, sublib) {
     # for each sample, then group by sub-library and day to average the per-sample fractions.
     f <- .SD[, c(
       .SD[, sublib, with=FALSE],
-      list(logf=log(library_size) - log(sum(library_size)),
+      list(logf=log10(library_size) - log10(sum(library_size)),
            f=library_size / sum(library_size))
     ), by=c("day", "sid")][, list(
       logf.mean=mean(logf),
@@ -262,15 +267,42 @@ partial_organoid_sizes.LTData <- function(partial, whole, sublib) {
       # Scale organoid sizes for each day separately
       wholesizes[, {
         # Scale the organoid sizes by shifting the log-mean according to the sub-library
-        # fractions. To account for uncertainty in these fractions, the log-residuals (i.e
-        # the deviations of the individual log-measurements from the per-day log-mean) are
-        # scaled. Specifically, scaled with s such that the log-variance of the final cell
-        # counts is increased by the log-variance of the fractional sub-library sizes.
-        logc <- log(cells)
+        # fractions, accounting for the uncertainty in these fractions.
+        logc <- log10(cells)
         logc.mean <- mean(logc)
-        s <- sqrt(1 + logf.var.fun(day) / var(logc))
-        if (!is.finite(s)) s <- 1
-        copy(.SD)[, cells := exp(s*(logc - logc.mean) + logc.mean + logf.mean.fun(day))]
+        logc.var <- var(logc)
+        if (logc.var > 0) {
+          # To account for uncertainty in the fractions f, the log-residuals (i.e
+          # the deviations of the individual log-measurements from the per-day log-mean) are
+          # scaled. Specifically, scaled with s such that the log-variance of the final cell
+          # counts is increased by the log-variance of the fractional sub-library sizes.
+          s <- sqrt(1 + logf.var.fun(day) / var(logc))
+        } else if (logf.var.fun(day) > 0) {
+          # If the cell counts are all identical, scaling the deviations from the mean
+          # does not work. Instead, we spread them according to the quantiles of a
+          # normal distribution around the mean, selected to (approximately) yield
+          # the standard deviation of the fractions.
+          # TODO: Figure out how to compute quantiles which yield the correct std.
+          # dev *exactly*. The current formula is a result of trial-and-error, and
+          # the "fudge factor" d was found by experimentation. Ugh.
+          k <- length(logc)
+          d <- 0.171010
+          logc <- qnorm(seq(from=1/(2*k+d), to=(2*k+d-1)/(2*k+d), length.out=k),
+                        mean=logc.mean, sd=sqrt(logf.var.fun(day)))
+          s <- 1
+        } else {
+          warning("Unable to compute mean-deviation scaling factor for some samples")
+          s <- 1
+        }
+        # Scale cell counts, and also output the fraction we found
+        # Note that "cells" and "fraction" are required columns for LTData,
+        # but fraction.logsd is not. We just output the latter for validation
+        # purposes.
+        sd <- copy(.SD)
+        sd[, cells := 10^(s*(logc - logc.mean) + logc.mean + logf.mean.fun(day))]
+        sd[, fraction := 10^(logf.mean.fun(day)) ]
+        sd[, fraction.logsd := sqrt(logf.var.fun(day)) ]
+        sd
       }, by=.(day)]
     }, by=sublib]
   }, by=groups]
