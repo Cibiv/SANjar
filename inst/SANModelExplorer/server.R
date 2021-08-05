@@ -244,7 +244,7 @@ function(input, output, session) {
     # The final time, which is the Tmax in the last row of the rates table
     Tfinal <- reactive({
         if (nrow(input_rates()) > 0)
-            max(input_rates()$Tmax, na.rm=TRUE)
+            max(input_rates()$Tmax, dataset_tfinal(), na.rm=TRUE)
         else
             0
     })
@@ -291,7 +291,13 @@ function(input, output, session) {
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (input$s0 > 0)) {
             message("Simulating the SAN model")
-            r <- san_stochastic(L=input$s0, rates=input_rates(), samples_per_day=1,
+            rt <- copy(input_rates())
+            # If the last Tmax in the rates table precedes Tfinal(), adjust
+            # the rates table accordingly
+            if (rt[nrow(rt), Tmax] < Tfinal())
+                rt[nrow(rt), Tmax := Tfinal()]
+            # Simulate model
+            r <- san_stochastic(L=input$s0, rates=rt, samples_per_day=1,
                                 p_cutoff=as.numeric(input$p_cutoff))[, list(
                 sid=-1,
                 day=t,
