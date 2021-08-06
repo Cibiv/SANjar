@@ -73,7 +73,7 @@ LTData <- function(lineagesizes=NULL, organoidsizes=NULL, sequencing=NULL, unit=
   }
 
   # Add missing columns to sequencing table
-  for(col in c("library_size", "pcr_efficiency", "phantom_threshold", "reads_per_cell")) {
+  for(col in c("library_size", "pcr_efficiency", "phantom_threshold", "reads_per_cell", "lineage_aliases")) {
     if (!(col %in% names(sequencing)))
       sequencing[, eval(col) := NA_real_]
   }
@@ -138,37 +138,81 @@ subset.LTData  <- function(lt, ...) {
 #' 
 #' @import gwpcR
 #' @export
-estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, molecules=1, replace=FALSE) {
+estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, lineage_aliases=NA, molecules=1, replace=FALSE) {
   if (lt$unit == "cells")
     stop("sequencing parameter estimation requires read counts, not cell counts")
-  
-  # Estimate PCR efficiency from day-0 data if possible, fall back to hard-coded default of 33% otherwise
-  if (is.na(pcr_efficiency)) {
-    day0 <- lt$lineagesizes[day==0]
-    pcr_efficiency <- if (nrow(day0) > 0) {
-      day0.gwpcr <- pcr_efficiency <- day0[, {
-        gwpcrpois.est(reads, threshold=min(reads), molecules=molecules)
-      }, by=c(lt$groups, "day", "sid")]
-      day0.gwpcr[, signif(median(efficiency), 3) ]
-    } else {
-      warning("PCR efficiency cannot be estimated due to missing day 0 data, setting to 33%")
-      0.33
-    }
-  }
   
   # Copy sequencing parameter table before modifying it below
   lt$sequencing <- copy(lt$sequencing)
   
+  # Estimate PCR efficiency and number of lineage aliases from day-0 data if possible
+  # fall back to hard-coded default of 33% and no aliasing otherwise
+  if (is.na(pcr_efficiency) || is.na(lineage_aliases)) {
+    seq.day0 <- lt$lineagesizes[, {
+      # Fetch organoidsizes for current group
+      os <- if (length(lt$groups) > 0)
+        lt$organoidsizes[.BY]
+      else
+        lt$organoidsizes
+      # Compute median number of cells on day 0
+      cells0 <- os[day==0, median(cells, na.rm=TRUE)]
+      # Fetch lineagesizes for day 0
+      ls0 <- .SD[day==0]
+      r <- if (nrow(ls0) > 0) {
+        # We have day 0 data for the current group, estimate PCR efficiency and
+        # total number of lineages (including unobserved)
+        pcr0 <- ls0[, gwpcrpois.est(reads, threshold=min(reads), molecules=molecules), by=.(sid)]
+        pcr0[, list(pcr_efficiency=median(efficiency, na.rm=TRUE),
+                    lineage_aliases=weighted.mean(n.tot/cells0, 1/loss - 1, na.rm=TRUE))]
+      } else {
+        # No day-0 data for the current group
+        list(pcr_efficiency=NA_real_, lineage_aliases=NA_real_)
+      }
+      # Replace NAs by hardcoded defaults
+      if (is.na(r$pcr_efficiency)) {
+        message("Unable to estimate PCR efficiency for ",
+                paste0(names(.BY), "=", lapply(.BY, as.character), collapse=", "),
+                ", setting to 0.33")
+        r$pcr_efficiency <- 0.33
+      }
+      if (is.na(r$lineage_aliases)) {
+        message("Unable to estimate number of lineage aliases for ",
+                paste0(names(.BY), "=", lapply(.BY, as.character), collapse=", "),
+                ", setting to 1")
+        r$lineage_aliases <- 1
+      }
+      r
+    }, by=eval(lt$groups)]
+    if (length(lt$groups) > 0)
+      seq.day0 <- seq.day0[lt$sequencing[, c(lt$groups, "day", "sid"), with=FALSE], on=c(lt$groups)]
+    else
+      seq.day0 <- seq.day0[, c(lt$sequencing[, c("day", "sid"), with=FALSE], .SD) ]
+    setkeyv(seq.day0, c(lt$groups, "day", "sid"))
+  }
+
+  # Update PCR efficiency in sequencing table
+  if (is.na(pcr_efficiency)) {
+    lt$sequencing[seq.day0, pcr_efficiency :=
+                    ifelse(is.na(pcr_efficiency) | replace, i.pcr_efficiency, pcr_efficiency) ]
+  } else {
+    lt$sequencing[is.na(is.na(pcr_efficiency) | replace), pcr_efficiency := ..pcr_efficiency]
+  }
+
+  # Update number of lineage aliases in sequencing table
+  if (is.na(lineage_aliases)) {
+    lt$sequencing[seq.day0, lineage_aliases :=
+                    ifelse(is.na(lineage_aliases) | replace, i.lineage_aliases, lineage_aliases) ]
+  } else {
+    lt$sequencing[is.na(is.na(lineage_aliases) | replace), lineage_aliases := ..lineage_aliases]
+  }
+  
   # Determine each sample's library size and phantom threshold and update sequencing table
   seq <- lt$lineagesizes[, list(
     library_size=sum(reads),
-    pcr_efficiency=pcr_efficiency,
     phantom_threshold=min(reads)
   ), keyby=c(lt$groups, "day", "sid")]
   lt$sequencing[seq, library_size :=
                   ifelse(is.na(library_size) | replace, i.library_size, library_size)      ]
-  lt$sequencing[seq, pcr_efficiency :=
-                  ifelse(is.na(pcr_efficiency) | replace, i.pcr_efficiency, pcr_efficiency)    ]
   lt$sequencing[seq, phantom_threshold :=
                   ifelse(is.na(phantom_threshold) | replace, i.phantom_threshold, phantom_threshold) ]
 
@@ -340,7 +384,8 @@ normalize_library_sizes.LTData.scale <- function(lt) {
          library_size=library_size.min,
          pcr_efficiency=pcr_efficiency.med,
          phantom_threshold=phantom_threshold.max,
-         reads_per_cell=reads_per_cell * (library_size.min / library_size))
+         reads_per_cell=reads_per_cell * (library_size.min / library_size),
+         lineage_aliases=lineage_aliases)
   }, by=c(lt$groups, "day")]
   setkeyv(sequencing.norm, c(lt$groups, "day", "sid"))
 
