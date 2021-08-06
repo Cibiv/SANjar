@@ -7,7 +7,7 @@ library(scales)
 # Parameters:
 #  LOCATION.PARAMETERSETS
 #  DEFAULT.PARAMETERSET
-#  DATASET
+#  DATASETS
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
@@ -105,43 +105,74 @@ are.rates.identical <- function(r1, r2) {
 
 # Server logic
 function(input, output, session) {
+    # Datasets
+    if (length(DATASETS) > 1) {
+        enable("dataset")
+        updateSelectInput(session, "dataset", choices=names(DATASETS))
+    } else {
+        disable("dataset")
+        updateSelectInput(session, "dataset", choices=character())
+    }
+    
+    # Dataset (all groups)
+    dataset <- reactive({
+        if (length(DATASETS) > 1) {
+            if ((length(input$dataset) == 1) && !is.null(input$dataset) && (input$dataset != "")) {
+                message("Switching to dataset ", input$dataset)
+                DATASETS[[input$dataset]]
+            } else {
+                message("Switching to first dataset by default, selected dataset ", input$dataset, " does not exist")
+                DATASETS[[1]]
+            }
+        } else {
+            message("Switching to first dataset by default, no dataset selected")
+            DATASETS[[1]]
+        }
+    })
+    
     # Datagroups
     # Datasets can contain multiple groups of samples, distinguished by
-    # the group key column(s) DATASET$groups. dataset_groups() lists the
+    # the group key column(s) dataset()$groups. dataset_groups() lists the
     # available groups and their label (last column and key).
     dataset_groups <- reactiveVal()
     observeEvent(dataset_groups(), {
-        labels <- dataset_groups()[, key(dataset_groups()), with=FALSE]$V1
-        updateSelectInput(session, "datagroup", choices=labels)
-        if (!is.null(labels) && (length(labels) > 0))
-            enable("datagroup")
-        else
+        dg <- dataset_groups()
+        if (is.null(dg) || (nrow(dg) < 1)) {
+            updateSelectInput(session, "datagroup", choices=character())
             disable("datagroup")
+        } else {
+            enable("datagroup")
+            labels <- dg[, key(dg), with=FALSE]$V1
+            updateSelectInput(session, "datagroup", choices=labels)
+        }
     })
-    dataset_groups(local({
-        if (length(DATASET$groups) > 0) {
+    observeEvent(dataset(), {
+        message("Dataset changed, updating data group list")
+        ds <- dataset()
+        dg <- if (length(ds$groups) > 0) {
             # Create table listing groups and their label (first column and key)
-            dg <- DATASET$lineagesizes[, list(paste0(names(.BY), "=", lapply(.BY, as.character),
-                                                     collapse=" "))
-                                       , by=eval(DATASET$groups) ]
-            k <- length(DATASET$groups)
-            dg <- dg[, colnames(dg)[c(k+1, 1:k)], with=FALSE]
-            setkeyv(dg, colnames(dg)[1])
-            dg
+            dg <- ds$lineagesizes[, list(paste0(names(.BY), "=", lapply(.BY, as.character),
+                                                collapse=" "))
+                                  , by=eval(ds$groups) ]
+            k <- length(ds$groups)
+            dg[, colnames(dg)[c(k+1, 1:k)], with=FALSE]
         } else {
             # Dataset has no groups
-            NULL
+            dg <- data.table(label=character())
         }
-    }))
+        # Update group list
+        setkeyv(dg, colnames(dg)[1])
+        dataset_groups(dg)
+    })
 
     # Lineagesize unit
     dataset_lineagesize_expr <- reactiveVal()
-    observeEvent(DATASET, {
-        if (DATASET$unit == "cells") {
-            updateCheckboxInput(session, "stochastic_lsd_normlibsize", value=FALSE)
+    observeEvent(dataset(), {
+        ds <- dataset()
+        if (ds$unit == "cells") {
             disable("stochastic_lsd_normlibsize")
             dataset_lineagesize_expr(expression(cells))
-        } else if (DATASET$unit == "reads") {
+        } else if (ds$unit == "reads") {
             enable("stochastic_lsd_normlibsize")
             dataset_lineagesize_expr(expression(reads))
         } else
@@ -150,22 +181,32 @@ function(input, output, session) {
 
     # Dataset (after filtering down to a single group)
     dataset_group <- reactive({
+        # It's a waste to respond to dataset changes here, since changing
+        # the dataset will also update dataset_groups() 
+        ds <- isolate(dataset())
         # Select group
-        group <- if (!is.null(dataset_groups())) {
-            # Translate lable to group key
-            groupkey <- if ((length(input$datagroup) == 1) && !is.null(input$datagroup) && (input$datagroup != ""))
-                dataset_groups()[list(input$datagroup), !1]
-            else
-                dataset_groups()[1, !1]
-            # Filter DATASET down to only the selected group
-            stopifnot(nrow(groupkey) == 1)
+        group <- if (nrow(dataset_groups()) > 1) {
+            # Translate label to group key
+            # If the translation fails, select the first group in the dataset
+            groupkey <- NULL
+            if ((length(input$datagroup) == 1) && !is.null(input$datagroup) && (input$datagroup != "")) {
+                groupkey <- dataset_groups()[list(input$datagroup), !1]
+                if (nrow(groupkey) != 1)
+                    groupkey <- NULL
+            }
+            # Validate the group key, if invalid select first group
+            if (is.null(groupkey) || !all(names(groupkey) %in% ds$groups))
+                groupkey <- dataset_groups()[1, !1]
+            # Filter dataset down to only the selected group
             message("Selecting data group ",
                     paste0(names(groupkey), "=", lapply(groupkey, as.character), collapse=", "))
-            do.call(subset, c(list(DATASET), groupkey))
-        } else
-            DATASET
+            do.call(subset, c(list(ds), groupkey))
+        } else {
+            message("Selecting full dataset")
+            ds
+        }
         # Normalize library sizes if lineage sizes are relative and normalization was requested
-        if ((DATASET$unit == "reads") && input$stochastic_lsd_normlibsize)
+        if ((ds$unit == "reads") && input$stochastic_lsd_normlibsize)
             group <- SANjar::normalize_library_sizes(group, method="scale")
         group
     })
@@ -477,9 +518,10 @@ function(input, output, session) {
         } else NULL
     })
     san_stochastic_results_lineagesize_expr <- reactive({
-        if (DATASET$unit == "cells")
+        ds <- dataset()
+        if (ds$unit == "cells")
             expression(C.obs)
-        else if (DATASET$unit == "reads")
+        else if (ds$unit == "reads")
             expression(R)
         else
             stop("lineagesizes must contain column 'cells' or 'reads'")
@@ -760,7 +802,7 @@ function(input, output, session) {
             my_scale_log10(scale_y_log10, oob=oob_keep) +
             annotation_logticks(sides="bl") +
             xlab("rank") +
-            ylab(paste0("lineage size [", DATASET$unit, "]")) +
+            ylab(paste0("lineage size [", dataset()$unit, "]")) +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
                                name=NULL)
@@ -825,7 +867,7 @@ function(input, output, session) {
         p <- ggplot() +
             my_scale_log10_pretransformed(scale_x_continuous) +
             annotation_logticks(sides="b") +
-            xlab(paste0("lineage size [", DATASET$unit, "]")) +
+            xlab(paste0("lineage size [", dataset()$unit, "]")) +
             ylab("density") +
             scale_color_manual(breaks=c('data', 'model', 'model+seq.'),
                                values=c('maroon', 'violet', 'black'),
