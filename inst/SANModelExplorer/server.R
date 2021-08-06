@@ -3,6 +3,7 @@ library(shiny)
 library(rhandsontable)
 library(ggplot2)
 library(scales)
+library(extraDistr)
 
 # Parameters:
 #  LOCATION.PARAMETERSETS
@@ -63,6 +64,19 @@ my_scale_log10_pretransformed <- function(scale, ...) scale(
     labels = scales::math_format(10^.x),
     ...
 )
+
+# Equation to solve to determine the lambda parameter
+# for a zero-truncated Poisson distribution with mean m
+tpois.lambda.eq <- deriv(expression((m - l/(1-exp(-l)))^2), namevec=c("l"),
+                         function.arg=c("l", "m"))
+
+# Compute lambda parameter for a zero-truncated Poisson distribution with  mean m
+tpois.lambda <- function(mean) {
+    if (mean <= 1)
+        return(NA_real_)
+    r <- nlm(tpois.lambda.eq, p=mean, m=mean)
+    return(r$estimate)
+}
 
 #' Hack for deterministic_celltypes to show the correct legend
 make_legend_key_twocolor <- function(legend, row, column, color1, color2, pattern="dashed") {
@@ -467,15 +481,57 @@ function(input, output, session) {
                " for day ", input$day_lsd)
     })
     
+    # Lineage aliases parameter
+    lineage_aliases_manual_or_auto <- reactive({
+        if (!is.na(input$lineage_aliases) && (input$lineage_aliases > 0)) {
+            a <- dataset_group()$sequencing[, list(lineage_aliases=(input$lineage_aliases)), keyby=day]
+            auto <- FALSE
+        } else {
+            a <- dataset_group()$sequencing[, list(lineage_aliases=median(lineage_aliases, na.rm=TRUE)), keyby=day]
+            a[is.na(lineage_aliases), lineage_aliases := 1]
+            auto <- TRUE
+        }
+        # Compute lambda parameter of a zero-truncated Poisson distribution that
+        # yields the requested average number of lineage_aliases per cell
+        a <- a[, list(day, lineage_aliases_lambda=tpois.lambda(lineage_aliases)), by=.(lineage_aliases)][, list(
+            lineage_aliases, lineage_aliases_lambda
+        ), keyby=day]
+        attr(a, "auto") <- auto
+        gwpcr_parameters_interpolate(a)
+    })
+    lineage_aliases_auto_message <- reactive({
+        lineage_aliases <- lineage_aliases_manual_or_auto()
+        if (!attr(lineage_aliases, "auto")) return("")
+        paste0("est. from data, =", signif(lineage_aliases[day==input$day_lsd, lineage_aliases], 3),
+               " uniformly")
+    })
+    
+    san_stochastic_results_aliases <- reactive({
+        if (!is.null(san_stochastic_results())) {
+            message("Simulating lineage aliasing")
+            # Simulate lineage aliasing, i.e. lineages which have multiple labels
+            (san_stochastic_results()
+             [lineage_aliases_manual_or_auto(), on="day", nomatch=NULL][, {
+                 if (is.na(lineage_aliases_lambda[1]))
+                     list(day=day, sid=sid, lid=lid, dt=dt, S=S, A=A, N=N, C=C)
+                 else {
+                     r <- rtpois(length(day), lambda=lineage_aliases_lambda[1], a=0)
+                     list(day=rep(day, r), sid=rep(sid, r), lid=rep(lid, r), dt=rep(dt, r),
+                          S=rep(S, r), A=rep(A, r), N=rep(N, r), C=rep(C, r))
+                 }
+             }])
+        } else NULL
+    })
+    
     # Scale cell counts 
     san_stochastic_results_reads <- reactive({
-        if (!is.null(san_stochastic_results())) {
+        if (!is.null(san_stochastic_results_aliases())) {
             message("Scaling cell counts to make them comparable with reads")
             # Translate cell counts to reads according to library size 
             # In contrast to san_stochastic_results_with_pcr(), we don't
             # actually introduce any stochasticity here, but simply adjust
             # the scale. C.obs is therefore identical to C here.
-            r <- (san_stochastic_results()
+            r <- (san_stochastic_results_aliases()
                   [pcr_efficiency_manual_or_auto(), on="day", nomatch=NULL]
                   [library_size_manual_or_auto(), on="day", nomatch=NULL]
                   [, list(
@@ -498,13 +554,13 @@ function(input, output, session) {
     
     # Simulate PCR+Sequencing
     san_stochastic_results_with_pcr <- reactive({
-        if (!is.null(san_stochastic_results())) {
+        if (!is.null(san_stochastic_results_aliases())) {
             message("Simulating PCR and sequencing")
             # Simulate read counts under the gwpcR PCR model
             # The sequencing depth is computed from the total number of cells,
             # and the library size. The resulting table has the additional column
             # "R" containing the simulated read count.
-            r <- (san_stochastic_results()
+            r <- (san_stochastic_results_aliases()
                 [pcr_efficiency_manual_or_auto(), on="day", nomatch=NULL]
                 [library_size_manual_or_auto(), on="day", nomatch=NULL]
                 [, list(
@@ -769,7 +825,10 @@ function(input, output, session) {
     output$phantom_threshold_auto_message <- renderUI({
         helpText(HTML(phantom_threshold_auto_message()))
     })
-
+    output$lineage_aliases_auto_message <- renderUI({
+        helpText(HTML(lineage_aliases_auto_message()))
+    })
+    
     # Lineage size distribution
     plot_stochastic_lsd_logrank_loglineagesize <- reactive({
         message("Rendering rank-abundance plot of the lineage size distribution ")
