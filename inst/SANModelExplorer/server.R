@@ -430,7 +430,7 @@ function(input, output, session) {
             eff <- dataset_group()$sequencing[, list(pcr_efficiency=input$pcr_efficiency), keyby=day]
             attr(eff, "auto") <- FALSE
         } else {
-            eff <- dataset_group()$sequencing[, list(pcr_efficiency=median(pcr_efficiency)), keyby=day]
+            eff <- dataset_group()$sequencing[, list(pcr_efficiency=median(pcr_efficiency, na.rm=TRUE)), keyby=day]
             attr(eff, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(eff)
@@ -447,7 +447,7 @@ function(input, output, session) {
             ls <- dataset_group()$sequencing[, list(library_size=as.numeric(input$library_size)), keyby=day]
             attr(ls, "auto") <- FALSE
         } else {
-            ls <- dataset_group()$sequencing[, list(library_size=round(median(library_size))), keyby=day]
+            ls <- dataset_group()$sequencing[, list(library_size=round(median(library_size, na.rm=TRUE))), keyby=day]
             attr(ls, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(ls)
@@ -469,7 +469,7 @@ function(input, output, session) {
             th <- dataset_group()$sequencing[, list(phantom_threshold=(input$phantom_threshold)), keyby=day]
             attr(th, "auto") <- FALSE
         } else {
-            th <-  dataset_group()$sequencing[, list(phantom_threshold=round(median(phantom_threshold))), keyby=day]
+            th <-  dataset_group()$sequencing[, list(phantom_threshold=round(median(phantom_threshold, na.rm=TRUE))), keyby=day]
             attr(th, "auto") <- TRUE
         }
         gwpcr_parameters_interpolate(th)
