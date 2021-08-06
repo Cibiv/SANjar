@@ -1,5 +1,6 @@
 library(data.table)
 library(gwpcR)
+devtools::load_all(".")
 
 message("*** Importing FACS-based organoid sizes from h9_organoidsizes_facs.tsv")
 h9_organoidsizes_facs <- data.table(read.table("data-raw/h9_organoidsizes_facs.tsv", header=TRUE, sep="\t"))
