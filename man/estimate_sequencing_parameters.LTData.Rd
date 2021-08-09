@@ -7,6 +7,7 @@
 \method{estimate_sequencing_parameters}{LTData}(
   lt,
   pcr_efficiency = NA,
+  lineage_aliases = NA,
   molecules = 1,
   replace = FALSE
 )
