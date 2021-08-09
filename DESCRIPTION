@@ -12,7 +12,8 @@ Imports:
         methods,
         data.table,
         lamW,
-        gwpcR
+        gwpcR,
+        matrixStats
 Suggests:
         compare,
         testthat

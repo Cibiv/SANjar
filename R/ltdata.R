@@ -137,6 +137,7 @@ subset.LTData  <- function(lt, ...) {
 #' Estimate sequencing parameters (library size, PCR efficiency, phantom threshold, read_per_cell)
 #' 
 #' @import gwpcR
+#' @import matrixStats
 #' @export
 estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, lineage_aliases=NA, molecules=1, replace=FALSE) {
   if (lt$unit == "cells")
@@ -160,10 +161,14 @@ estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, lineage
       ls0 <- .SD[day==0]
       r <- if (nrow(ls0) > 0) {
         # We have day 0 data for the current group, estimate PCR efficiency and
-        # total number of lineages (including unobserved)
+        # total number of lineages (including unobserved).
+        # When computing the median number of lineages present (including unobserved!),
+        # we take the accuracy of the estimates into account by weighting them with
+        # (1-loss)^4. The exponent 4 stems from applying the delta method to the
+        # factor 1 / (1-loss) which is used to compute n.tot from n.obs. 
         pcr0 <- ls0[, gwpcrpois.est(reads, threshold=min(reads), molecules=molecules), by=.(sid)]
         pcr0[, list(pcr_efficiency=median(efficiency, na.rm=TRUE),
-                    lineage_aliases=weighted.mean(n.tot/cells0, 1/loss - 1, na.rm=TRUE))]
+                    lineage_aliases=weightedMedian(n.tot/cells0, (1 - loss)^4, na.rm=TRUE))]
       } else {
         # No day-0 data for the current group
         list(pcr_efficiency=NA_real_, lineage_aliases=NA_real_)
