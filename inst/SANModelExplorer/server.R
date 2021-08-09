@@ -412,7 +412,7 @@ function(input, output, session) {
     pcr_efficiency_auto_message <- reactive({
         eff <- pcr_efficiency_manual_or_auto()
         if (!attr(eff, "auto")) return("")
-        paste0("est. from day 0 data, =",eff[day==input$day_lsd, pcr_efficiency], " uniformly")
+        paste0("est. from day 0 data, =", signif(100*eff[day==input$day_lsd, pcr_efficiency], 2), "% uniformly")
     })
 
     # Sequencing library size parameter
