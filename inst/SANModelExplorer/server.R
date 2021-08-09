@@ -178,12 +178,12 @@ function(input, output, session) {
             # If the translation fails, select the first group in the dataset
             groupkey <- NULL
             if ((length(input$datagroup) == 1) && !is.null(input$datagroup) && (input$datagroup != "")) {
-                groupkey <- dataset_groups()[list(input$datagroup), !1]
+                groupkey <- dataset_groups()[list(input$datagroup), !1, nomatch=NULL]
                 if (nrow(groupkey) != 1)
                     groupkey <- NULL
             }
             # Validate the group key, if invalid select first group
-            if (is.null(groupkey) || !all(names(groupkey) %in% ds$groups))
+            if (is.null(groupkey) || !all(names(groupkey) %in% ds$groups) || (nrow(groupkey) != 1))
                 groupkey <- dataset_groups()[1, !1]
             # Filter dataset down to only the selected group
             message("Selecting data group ",
