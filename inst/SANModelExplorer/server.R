@@ -3,7 +3,6 @@ library(shiny)
 library(rhandsontable)
 library(ggplot2)
 library(scales)
-library(extraDistr)
 
 # Parameters:
 #  LOCATION.PARAMETERSETS
@@ -41,18 +40,6 @@ parameterset.fullpath <- function(name) {
     file.path(LOCATION.PARAMETERSETS, paste0(name, ".rd"))
 }
 
-# Fill in empty cells in the rate table
-parameterset.fillempty <- function(value) {
-    for(c in SAN.RATENAMES) {
-        # Fetch row corresponding to rate x
-        x <- value[[c]]
-        x.set <- !is.na(x)
-        # Set empty entries to the next non-empty entry or zero if no such entry exists
-        value[[c]] <- c(x[x.set], 0)[c(1, head(cumsum(x.set) + 1, n=-1))]
-    }
-    return(value)
-}
-
 # Better ggplot2 logscale
 my_scale_log10 <- function(scale, ...) scale(
     breaks = scales::trans_breaks("log10", function(x) 10^x),
@@ -64,19 +51,6 @@ my_scale_log10_pretransformed <- function(scale, ...) scale(
     labels = scales::math_format(10^.x),
     ...
 )
-
-# Equation to solve to determine the lambda parameter
-# for a zero-truncated Poisson distribution with mean m
-tpois.lambda.eq <- deriv(expression((m - l/(1-exp(-l)))^2), namevec=c("l"),
-                         function.arg=c("l", "m"))
-
-# Compute lambda parameter for a zero-truncated Poisson distribution with  mean m
-tpois.lambda <- function(mean) {
-    if (mean <= 1)
-        return(NA_real_)
-    r <- nlm(tpois.lambda.eq, p=mean, m=mean)
-    return(r$estimate)
-}
 
 #' Hack for deterministic_celltypes to show the correct legend
 make_legend_key_twocolor <- function(legend, row, column, color1, color2, pattern="dashed") {
@@ -237,7 +211,7 @@ function(input, output, session) {
         ), keyby=.(day, sid)]
     })
     dataset_group_ranksize <- reactive({
-        rank_size(dataset_group()$lineagesizes[, list(
+        SANjar::rank_size(dataset_group()$lineagesizes[, list(
             sid, day, size=eval(dataset_lineagesize_expr())
         )])
     })
@@ -290,7 +264,7 @@ function(input, output, session) {
         # Update the output before filling in missing values
         output.update.maybe.once(value)
         # Fill empty cells with surrounding values
-        value <- parameterset.fillempty(value)
+        value <- SANjar::ratestable.fill.na(value)
         input.update(value)
     }
     observeEvent(input$rates, {
@@ -345,7 +319,7 @@ function(input, output, session) {
     san_deterministic_results <- reactive({
         # Do nothing if the rates table is empty or s0 is zero
         if ((length(input_rates_list()) > 0) && (s0_actual() > 0)) {
-            r <- san_deterministic(s0=s0_actual(), rates=input_rates(), samples_per_day=10)[, list(
+            r <- SANjar::san_deterministic(s0=s0_actual(), rates=input_rates(), samples_per_day=10)[, list(
                 sid=-1, day=t,
                 S, A, N,
                 C=S+A+N
@@ -367,8 +341,8 @@ function(input, output, session) {
             if (rt[nrow(rt), Tmax] < Tfinal())
                 rt[nrow(rt), Tmax := Tfinal()]
             # Simulate model
-            r <- san_stochastic(L=s0_actual(), rates=rt, samples_per_day=1,
-                                p_cutoff=as.numeric(input$p_cutoff))[, list(
+            r <- SANjar::san_stochastic(L=s0_actual(), rates=rt, samples_per_day=1,
+                                        p_cutoff=as.numeric(input$p_cutoff))[, list(
                 sid=-1,
                 day=t,
                 dt, lid, S, A, N,
@@ -493,7 +467,7 @@ function(input, output, session) {
         }
         # Compute lambda parameter of a zero-truncated Poisson distribution that
         # yields the requested average number of lineage_aliases per cell
-        a <- a[, list(day, lineage_aliases_lambda=tpois.lambda(lineage_aliases)), by=.(lineage_aliases)][, list(
+        a <- a[, list(day, lineage_aliases_lambda=SANjar::tpois.lambda(lineage_aliases)), by=.(lineage_aliases)][, list(
             lineage_aliases, lineage_aliases_lambda
         ), keyby=day]
         attr(a, "auto") <- auto
@@ -515,7 +489,7 @@ function(input, output, session) {
                  if (is.na(lineage_aliases_lambda[1]))
                      list(day=day, sid=sid, lid=lid, dt=dt, S=S, A=A, N=N, C=C)
                  else {
-                     r <- rtpois(length(day), lambda=lineage_aliases_lambda[1], a=0)
+                     r <- extraDistr::rtpois(length(day), lambda=lineage_aliases_lambda[1], a=0)
                      list(day=rep(day, r), sid=rep(sid, r), lid=rep(lid, r), dt=rep(dt, r),
                           S=rep(S, r), A=rep(A, r), N=rep(N, r), C=rep(C, r))
                  }
@@ -547,7 +521,7 @@ function(input, output, session) {
     
     san_stochastic_ranksize <- reactive({
         if (!is.null(san_stochastic_results_reads())) {
-            rank_size(san_stochastic_results_reads()[, list(
+            SANjar::rank_size(san_stochastic_results_reads()[, list(
                 sid, day, size=eval(san_stochastic_results_lineagesize_expr()))])
         } else NULL
     })
@@ -592,7 +566,7 @@ function(input, output, session) {
     })
     san_stochastic_ranksize_with_pcr_filtered <- reactive({
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            rank_size(san_stochastic_results_with_pcr_filtered()[, list(
+            SANjar::rank_size(san_stochastic_results_with_pcr_filtered()[, list(
                 sid, day, size=eval(san_stochastic_results_lineagesize_expr()))])
         } else NULL
     })
