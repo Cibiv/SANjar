@@ -12,10 +12,15 @@ Imports:
         methods,
         data.table,
         lamW,
-        gwpcR,
         matrixStats,
+        gwpcR,
         ggplot2,
-        scales
+        scales,
+        shiny,
+        shinyjs,
+        shinycssloaders,
+        rhandsontable,
+        bsplus
 Suggests:
         compare,
         testthat
