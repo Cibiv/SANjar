@@ -175,9 +175,9 @@ estimate_sequencing_parameters.LTData <- function(lt, pcr_efficiency=NA, lineage
       }
       # Replace NAs by hardcoded defaults
       if (is.na(r$pcr_efficiency)) {
-        message("Unable to estimate PCR efficiency for ",
+        warning("Unable to estimate PCR efficiency for ",
                 paste0(names(.BY), "=", lapply(.BY, as.character), collapse=", "),
-                ", setting to 0.33")
+                ", setting to hard-coded default of 33%")
         r$pcr_efficiency <- 0.33
       }
       if (is.na(r$lineage_aliases)) {
