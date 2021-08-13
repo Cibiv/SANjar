@@ -1,6 +1,7 @@
+#' Create SAN model parametrization
 #'
 #' @export
-san_parametrization <- function(ranges, rt.base, s0.base=NA_integer_, cc_days=NULL, rs_days=NULL, rs_ranks=NULL, sc_days=NULL) {
+san_parametrization <- function(ranges, basemodel, match.s0.to.data=TRUE, cc_days=NULL, rs_days=NULL, rs_ranks=NULL, sc_days=NULL) {
   # Validate parameter names (I)
   pnames <- names(ranges)
   pvalid <- grepl("^([0-9]+)([A-Z]+)$", pnames)
@@ -8,11 +9,11 @@ san_parametrization <- function(ranges, rt.base, s0.base=NA_integer_, cc_days=NU
     stop("invalid parameter names ", paste0(pnames[!pvalid], collapse=", "))
   
   # Create map that translates parameter names to rate table columns
-  # rt.pmap is a that contains as many entries as the rate table has rows, i.e.
+  # rateslist.pmap is a that contains as many entries as the rate table has rows, i.e.
   # it mimic the format of the rate table itself as stored in SANParametrization
   # object (see split() below).
-  M <- list()
-  rt.pmap <- lapply(rt.base$Tmax, function(tmax) {
+  basemodel <- ratestable.fill.na(basemodel)
+  rateslist.pmap <- lapply(basemodel$rates$Tmax, function(tmax) {
     # Find rates which affect the current time interval (up to tmax)
     pattern <- paste0("^", tmax, "([A-Z]+)$")
     for.tmax <- grepl(pattern, pnames)
@@ -25,26 +26,26 @@ san_parametrization <- function(ranges, rt.base, s0.base=NA_integer_, cc_days=NU
     if (length(map) > 0)
       names(map) <- paste0("r_", unlist(strsplit(r, split="")))
     # Check that target columns exist (II)
-    if (!(all(names(map) %in% colnames(rt.base))))
-      stop("invalid parameter names ", paste0(map[!(names(map) %in% colnames(rt.base))], collapse=", "))
+    if (!(all(names(map) %in% colnames(basemodel$rates))))
+      stop("invalid parameter names ", paste0(map[!(names(map) %in% colnames(basemodel$rates))], collapse=", "))
     return(map)
   })
   # Check that all parameter names could be translated (III)
-  if (!all(pnames %in% unlist(rt.pmap)))
-    stop("invalid parameter names ", paste0(pnames[!(pnames %in% unlist(rt.pmap))], collapse=", "))
+  if (!all(pnames %in% unlist(rateslist.pmap)))
+    stop("invalid parameter names ", paste0(pnames[!(pnames %in% unlist(rateslist.pmap))], collapse=", "))
 
   # Convert default ratetable into list, and replace the last Tmax by infinity
   # to allow simulations to run arbitrarily long
-  rt.base <- lapply(split(ratestable.fill.na(rt.base), by="Tmax"), as.list)
-  rt.base[[length(rt.base)]]$Tmax <- Inf
+  rateslist.base <- lapply(split(ratestable.fill.na(basemodel$rates), by="Tmax"), as.list)
+  rateslist.base[[length(rateslist.base)]]$Tmax <- Inf
   
   # Create SANParametrization object
   return(structure(list(
     names=as.character(pnames),
     ranges=as.list(ranges),
-    rt.base=rt.base,
-    s0.base=as.integer(s0.base),
-    rt.pmap=rt.pmap,
+    rateslist.base=rateslist.base,
+    s0.base=if (match.s0.to.data) NA else as.integer(basemodel$s0),
+    rateslist.pmap=rateslist.pmap,
     cc_days=if (!is.null(cc_days)) as.integer(cc_days) else NULL,
     rs_days=if (!is.null(rs_days)) as.integer(rs_days) else NULL,
     rs_ranks=if (!is.null(rs_ranks)) as.integer(rs_ranks) else NULL,
@@ -52,38 +53,33 @@ san_parametrization <- function(ranges, rt.base, s0.base=NA_integer_, cc_days=NU
   ), class="SANParametrization"))
 }
 
-#' Convert a parameter vector to a model instance
+#' Convert a parameter vector to a rate list and inital cell count (s0)
 #' 
 #' @export
-model.instance <- function(parameterization, ...) UseMethod("model.instance")
+rateslist_s0 <- function(parameterization, params) UseMethod("rateslist_s0")
 
 #' Adapt a SAN model parametrization (SANP instance) to a specific dataset
 #' 
 #' @export
 adapt <- function(parameterization, ...) UseMethod("adapt")
 
-#' Create a posterior distribution instance from a SAN model parametrization and a dataset
-#' 
-#' @export
-san_posterior <- function(parameterization, ...) UseMethod("san_posterior")
-
 #' Convert a parameter vector to a model instance
 #' 
 #' @export
-model.instance.SANParametrization <- function(parameterization, params) {
-  rt <- parameterization$rt.base
-  rt.pmap <- parameterization$rt.pmap
-  for(i in 1:length(rt)) {
-    m <- rt.pmap[[i]]
+rateslist_s0.SANParametrization <- function(parameterization, params) {
+  rl <- parameterization$rateslist.base
+  rateslist.pmap <- parameterization$rateslist.pmap
+  for(i in 1:length(rl)) {
+    m <- rateslist.pmap[[i]]
     if (length(m) > 0)
-      rt[[i]][names(m)] <- params[m]
+      rl[[i]][names(m)] <- params[m]
   }
   
   s0 <- parameterization$s0.base
   if ("s0" %in% parameterization$names)
     s0 <- params["s0"]
   
-  return(list(s0=s0, rt=rt))
+  return(list(s0=s0, rateslist=rl))
 }
 
 #' Adapt a SAN model parametrization (SANP instance) to a specific dataset
@@ -96,6 +92,7 @@ adapt.SANParametrization <- function(parameterization, lt) {
     if (nrow(day0) < 1)
       stop("No organoidsizes for day 0, unable to auto-detect s0.base")
     parameterization$s0.base <- round(median(day0$cells))
+    message("Auto-detected s0 to be ", parameterization$s0.base)
   }
   
   if (is.null(parameterization$cc_days)) {
@@ -114,8 +111,8 @@ adapt.SANParametrization <- function(parameterization, lt) {
 #' Create a posterior distribution instance from a SAN model parametrization and a dadtaset
 #' 
 #' @export
-san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
-                                             min.size=0.1, min.logsd=0.1, cluster=NULL)
+san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
+                         min.size=0.1, min.logsd=0.1, cluster=NULL)
 {
   # Setup cluster
   if (!is.null(cluster)) {
@@ -145,15 +142,15 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
   ), on=.(day), keyby=.EACHI]
 
   # Compute log-CIs for lineage rank-sizes
-  logcis.rs <- rank_size(lt$lineagesizes[list(parametrization$rs_days), list(day, sid, size=cells), on=.(day)])[, list(
+  logcis.rs <- rank_size(lt$lineagesizes[list(parametrization$rs_days), list(day, sid, size=eval(lt$unit)), on=.(day)])[, list(
     logmean=mean(log10(size), na.rm=TRUE),
     logsd=sd(log10(size), na.rm=TRUE)
-  ), by=.(day, rank)]
+  ), keyby=.(day, rank)][CJ(parametrization$rs_days, parametrization$rs_ranks)]
 
   # Extract days at which the rates change
   params.na <- rep(NA_real_, length(parametrization$names))
   names(params.na) <- parametrization$names
-  days_ratechanges <- lapply(model.instance(parametrization, params.na)$rt, function(r) r$Tmax)
+  days_ratechanges <- lapply(rateslist_s0(parametrization, params.na)$rateslist, function(r) r$Tmax)
   # Extract list of days at which to compute cell-counts
   day_prev <- -1
   cc_days <- lapply(days_ratechanges, function(day) {
@@ -162,8 +159,8 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
     r
   })
   # Prepare vectors of cell-count log-means and log-sds to compute likelihoods
-  cc_days_logmean <- logcis.cc[list(parametrization$cc_days), logmean, on=.(day)]
-  cc_days_logsd <- logcis.cc[list(parametrization$cc_days), pmax(logsd, 0.1), on=.(day)]
+  cc_days_logmean <- pmax(logcis.cc$logmean, log10(min.size), na.rm=TRUE)
+  cc_days_logsd <- pmax(logcis.cc$logsd, min.logsd, na.rm=TRUE)
   if (!all(is.finite(cc_days_logmean)) || !all(is.finite(cc_days_logsd)))
     stop("LTData does not contain sufficient organoid size data for days ",
          paste0(parametrization$cc_days[!is.finite(cc_days_logmean) | !is.finite(cc_days_logsd)],
@@ -185,19 +182,19 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
     rs <- logcis.rs[day==rs_day]
     if (all(!is.finite(rs$logmean)))
       stop("LTData does not contain sufficient lineagesize data for day ", rs_day)
-    rs[list(rs_ranks), ifelse(is.finite(logmean), logmean, min.size), on=.(rank)]
+    rs[list(rs_ranks), pmax(logmean, log10(min.size), na.rm=TRUE), on=.(rank)]
   })
   rs_days_logsd <- lapply(rs_days, function(rs_day) {
     rs <- logcis.rs[day==rs_day]
-    rs[list(rs_ranks), pmax(ifelse(is.finite(logsd), logsd, 0), min.logsd), on=.(rank)]
+    rs[list(rs_ranks), pmax(logsd,  min.logsd, na.rm=TRUE), on=.(rank)]
   })
 
   # PCR and sequencing parameters
-  rs_libsize <- as.list(lt$sequencing[list(rs_days), median(library_size),
+  rs_libsize <- as.list(lt$sequencing[list(rs_days), ceiling(median(library_size)),
                                       on=.(day), by=.EACHI]$V1)
   rs_pcreff <- as.list(lt$sequencing[list(rs_days), median(pcr_efficiency),
                                      on=.(day), by=.EACHI]$V1)
-  rs_th <- as.list(lt$sequencing[list(rs_days), median(phantom_threshold),
+  rs_th <- as.list(lt$sequencing[list(rs_days), ceiling(median(phantom_threshold)),
                                  on=.(day), by=.EACHI]$V1)
   rs_aliaslambda <- as.list(lt$sequencing[list(rs_days), tpois.lambda(median(lineage_aliases)),
                                           on=.(day), by=.EACHI]$V1)
@@ -217,26 +214,26 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
   res <- c(list(ll_tot=0, ll_cc=NA_real_), res_ll_rs, res_cc, res_sc, res_rs)
   
   # Compute cellcounts
-  cellcounts <- function(s0, rt) {
+  cellcounts <- function(s0, rl) {
     x0 <- c(S=s0, A=0, N=0)
     t0 <- 0
-    cc_list <- rep(list(NULL), length(rt))
-    sc_list <- rep(list(NULL), length(rt))
-    for(ri in 1:length(rt)) {
+    cc_list <- rep(list(NULL), length(rl))
+    sc_list <- rep(list(NULL), length(rl))
+    for(ri in 1:length(rl)) {
       # Times (relative to the previous stopping time t0) at which to evaluate the model
-      ts <- c(cc_days[[ri]] - t0, sc_days[[ri]] - t0, rt[[ri]]$Tmax - t0)
+      ts <- c(cc_days[[ri]] - t0, sc_days[[ri]] - t0, rl[[ri]]$Tmax - t0)
       ti_cc <- 1:length(cc_days[[ri]])
       ti_sc <- length(cc_days[[ri]]) + 1:length(sc_days[[ri]])
       ti_tmax <- length(ts)
       # Evaluate model
-      san.out <- san_deterministic_eval_fixedrates(x0=x0, times=ts, rates=rt[[ri]])
+      san.out <- san_deterministic_eval_fixedrates(x0=x0, times=ts, rates=rl[[ri]])
       # Extract results (sum S, A, N to get total cellcount)
       cc_list[[ri]] <- san.out[ti_cc, c("S", "A", "N")] %*% c(1,1,1)
       if (length(sc_days[[ri]]) > 0)
         sc_list[[ri]] <- san.out[ti_sc, "S"]
       # Update final time and state
       x0 <- san.out[ti_tmax,]
-      t0 <- rt[[ri]]$Tmax
+      t0 <- rl[[ri]]$Tmax
     }
 
     return(list(cc=unlist(cc_list), sc=unlist(sc_list)))
@@ -282,13 +279,13 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
   # Evaluate total log-likelihood for a single rate vector
   ll_params <- function(params, ll_cutoff) {
     # Get initial cell count and rates table
-    m <- model.instance(parametrization, params)
+    m <- rateslist_s0(parametrization, params)
+    rl <- m$rateslist
     s0 <- m$s0
-    rt <- m$rt
 
     # Evaluate deterministic SAN model
     # Exit early if the number of rcells grows unreasonably large
-    cc.out <- cellcounts(s0, rt)
+    cc.out <- cellcounts(s0, rl)
     stopifnot(length(names(res_cc)) == length(cc.out$cc))
     res[names(res_cc)] <- cc.out$cc
     stopifnot(length(names(res_sc)) == length(cc.out$sc))
@@ -311,13 +308,13 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
     
     # Evaluate stochastic SAN model and compute partial likelihoods L_rs_<day> for rank-sizes
     # Exit early if combined partial likelihoods become unreasonably small
-    rt.table <- rbindlist(rt)
+    rt <- rbindlist(rl)
     san.out <- NULL
     for(rs_i in 1:length(rs_days)) {
       rs_day <- rs_days[rs_i]
       # Evaluate model
       san.out <- tryCatch(
-        san_stochastic(L=s0, s0=1, previous=san.out, rates=rt.table,
+        san_stochastic(L=s0, s0=1, previous=san.out, rates=rt,
                        Tmax=rs_day, samples_per_day=1, p_cutoff=p.cutoff),
         error=function(e) {
           # If cell counts overflow set likelihood to -infinity (see alow below)
@@ -383,6 +380,8 @@ san_posterior.SANParametrization <- function(parametrization, lt, cc.cutoff=1e7,
     cc_days=parametrization$cc_days, sc_days=sc_days,
     rs_days=rs_days, rs_ranks=rs_ranks,
     parameters=parametrization$ranges,
-    parametrization=parametrization
+    parametrization=parametrization,
+    unit=lt$unit,
+    logcis_cc=logcis.cc, logcis_rs=logcis.rs
   ), class="SANPosterior"))
 }

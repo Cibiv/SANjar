@@ -2,10 +2,19 @@
 % Please edit documentation in R/posterior.R
 \name{san_posterior}
 \alias{san_posterior}
-\title{Create a posterior distribution instance from a SAN model parametrization and a dataset}
+\title{Create a posterior distribution instance from a SAN model parametrization and a dadtaset}
 \usage{
-san_posterior(parameterization, ...)
+san_posterior(
+  parametrization,
+  lt,
+  cc.cutoff = 1e+07,
+  p.cutoff = 0.01,
+  ll.site.min = -Inf,
+  min.size = 0.1,
+  min.logsd = 0.1,
+  cluster = NULL
+)
 }
 \description{
-Create a posterior distribution instance from a SAN model parametrization and a dataset
+Create a posterior distribution instance from a SAN model parametrization and a dadtaset
 }
