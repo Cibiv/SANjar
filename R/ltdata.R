@@ -1,5 +1,5 @@
 #' The estimated SAN model parameters for the LT47 dataset
-"lt47.ps"
+"lt47.model"
 
 #' The LT47 cerebral organoid lineage tracing dataset
 "lt47"

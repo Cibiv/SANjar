@@ -12,7 +12,7 @@ san_model_explorer <- function(..., location.parametersets=".") {
   app_env <- new.env()
   
   app_env$LOCATION.PARAMETERSETS <- location.parametersets
-  app_env$DEFAULT.PARAMETERSET <- lt47.ps
+  app_env$DEFAULT.PARAMETERSET <- lt47.model
 
   ds_expr <- substitute(list(...))
   ds <- list(...)
