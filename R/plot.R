@@ -6,8 +6,8 @@ plot.SANPosterior <- function(posterior, params=NULL, llout=NULL, plotlist=FALSE
     if (is.null(params))
       stop("either a parameter vector or the result of the posterior distribution loglikelihood function must be specified")
     message("llout not specified, evaluating model for parameters ",
-            paste0(names(params), "=", signif(params, 3), collapse=", "))
-    llmeta <- p$loglikelihood(params)
+            paste0(colnames(params), "=", signif(params, 3), collapse=", "))
+    llout <- posterior$loglikelihood(params)
   }
   
   # Convert output of loglikelihood function into a data.table  
