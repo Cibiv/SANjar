@@ -219,6 +219,20 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
                                    function(r, d) { paste0("RS", d, "_", r) }))
   res <- c(list(ll_tot=0, ll_cc=NA_real_), res_ll_rs, res_cc, res_sc, res_rs)
   
+  # Create environment to evaludate functions in
+  env <- new.env()
+  env$cc_days <- cc_days
+  env$cc_days_logmean <- cc_days_logmean
+  env$cc_days_logsd <- cc_days_logsd
+  env$rs_days <- rs_days
+  env$rs_ranks <- rs_ranks
+  env$rs_days_logmean <- rs_days_logmean
+  env$rs_days_logsd <- rs_days_logsd
+  env$res <- res
+  env$res_ll_rs <- res_ll_rs
+  env$res_cc <- res_cc
+  env$res_rs <- res_rs
+
   # Compute cellcounts
   cellcounts <- function(s0, rl) {
     x0 <- c(S=s0, A=0, N=0)
@@ -244,6 +258,8 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
 
     return(list(cc=unlist(cc_list), sc=unlist(sc_list)))
   }
+  environment(cellcounts) <- env
+  env$cellcounts <- cellcounts
   
   # Simulate lineage sizes and compute rank-sizes
   ranksizes_aliases_pcrseq <- function(san.out, day, param_i) {
@@ -269,18 +285,24 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     # Rank-sizes for selected ranks
     ifelse(rs_ranks <= length(ls.obs), sort(ls.obs, decreasing=TRUE)[rs_ranks], 0)
   }
+  environment(ranksizes_aliases_pcrseq) <- env
+  env$ranksizes_aliases_pcrseq <- ranksizes_aliases_pcrseq
   
   # Evaluate partial log-likelihood for cellcounts
   ll_cc <- function(cc) {
     ll.site <- -0.5 * ((log10(pmax(cc, min.size)) - cc_days_logmean) / cc_days_logsd)^2
     sum(pmax(ll.site, ll.site.min))
   }
+  environment(ll_cc) <- env
+  env$ll_cc <- ll_cc
   
   # Evaluate partial log-likelihood for rank-sizes
   ll_rs <- function(rs, rs_i) {
     ll.site <- -0.5 * ((log10(pmax(rs, min.size)) - rs_days_logmean[[rs_i]]) / rs_days_logsd[[rs_i]])^2
     sum(pmax(ll.site, ll.site.min))
   }
+  environment(ll_rs) <- env
+  env$ll_rs <- ll_rs
   
   # Evaluate total log-likelihood for a single rate vector
   ll_params <- function(params, ll_cutoff) {
@@ -372,12 +394,16 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     
     return(res)
   }
+  environment(ll_params) <- env
+  env$ll_params <- ll_params
   
   # Evaluate total log-likelihood for each row of the matrix `params`
   loglikelihood <- function(params, cutoffs=-Inf) {
     stopifnot((length(cutoffs) == 1) || (length(cutoffs) == nrow(params)))
     rbindlist(MLapply(ll_params, asplit(params, MARGIN=1), as.list(cutoffs)))
   }
+  environment(loglikelihood) <- env
+  env$loglikelihood <- loglikelihood
   
   return(structure(list(
     loglikelihood=loglikelihood,
