@@ -388,3 +388,46 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
                    min.size=0.1, min.logsd=0.1)
   ), class="SANPosterior"))
 }
+
+#' Combines multiple posteriors by summing up the likelihoods of the components
+#'
+#' @export
+san_posterior_combine <- function(...) {
+  # Get individual posterior objects
+  components <- list(...)
+  if (is.null(names(components)) || any(names(components) == "") || !all(sapply(components, function(p) "SANPosterior" %in% class(p))))
+    stop("arguments of san_posterior_combine() must be named and must have been created with san_posterior()")
+
+  # Check that the parameters are the same
+  parameters <- NULL
+  for(p in components) {
+    if (is.null(parameters))
+      parameters <- p$parameters
+    
+    if ((length(p$parameters) != length(parameters)) || any(names(p$parameters) != names(parameters)))
+      stop("posterior distributions to be combined must have the same parameters")
+  }
+  
+  # Create environment to evaludate functions in
+  env <- new.env()
+  env$loglikelihoods <- lapply(components, function(p) p$loglikelihood)
+    
+  # Evaluate total log-likelihood for each row of the matrix `params`
+  loglikelihood <- function(params, cutoffs=-Inf) {
+    # Evaluate individual posterior likelihoods
+    lls <- lapply(loglikelihoods, function(ll) ll(params, cutoffs) )
+    # Compute total likelihood
+    ll_tot <- Reduce(function(ll_tot, ll) ll_tot + ll$ll_tot, lls, 0)
+    # Return table containing the total likelihood and all meta-data from all
+    # individual likelihoods, with column names prefixed with the likelihood label
+    do.call(cbind, c(list(data.table(ll_tot)), lls))
+  }
+  environment(loglikelihood) <- env
+  env$loglikelihood <- loglikelihood
+  
+  return(structure(list(
+    loglikelihood=loglikelihood,
+    parameters=parameters,
+    components=components
+  ), class="SANCombinedPosterior"))
+}
