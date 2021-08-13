@@ -308,9 +308,9 @@ partial_organoid_sizes.LTData <- function(partial, whole, sublib) {
     # Compute per-sub-library organoid sizes by scaling the whole-organoid sizes accordingly
     f[, {
       # Create interpolation functions for the mean and variance of the sub-library fractions
-      logf.mean.fun <- approxfun(day, logf.mean)
+      logf.mean.fun <- approxfun(day, logf.mean, rule=2)
       logf.var.fun <- if (sum(!is.na(logf.var)) >= 2) 
-        approxfun(day, logf.var)
+        approxfun(day, logf.var, rule=2)
       else
         function(day) { 0 }
       # Scale organoid sizes for each day separately
