@@ -476,12 +476,15 @@ function(input, output, session) {
     lineage_aliases_auto_message <- reactive({
         lineage_aliases <- lineage_aliases_manual_or_auto()
         if (!attr(lineage_aliases, "auto")) return("")
-        paste0("est. from data, =", signif(lineage_aliases[day==input$day_lsd, lineage_aliases], 3),
-               " uniformly")
+        if (input$stochastic_lsd_lineagealiases)
+            paste0("est. from data, =", signif(lineage_aliases[day==input$day_lsd, lineage_aliases], 3),
+                   " uniformly")
+        else 
+            "not simulating lineage aliasing"
     })
     
     san_stochastic_results_aliases <- reactive({
-        if (!is.null(san_stochastic_results())) {
+        if (!is.null(san_stochastic_results()) && input$stochastic_lsd_lineagealiases) {
             message("Simulating lineage aliasing")
             # Simulate lineage aliasing, i.e. lineages which have multiple labels
             (san_stochastic_results()
@@ -494,7 +497,9 @@ function(input, output, session) {
                           S=rep(S, r), A=rep(A, r), N=rep(N, r), C=rep(C, r))
                  }
              }])
-        } else NULL
+        } else if (!is.null(san_stochastic_results()))
+            san_stochastic_results()
+        else NULL
     })
     
     # Scale cell counts 

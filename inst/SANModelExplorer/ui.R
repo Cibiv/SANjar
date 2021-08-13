@@ -44,6 +44,7 @@ fluidPage(
                                  withSpinner(plotOutput("stochastic_nlineages", width="100%"), hide.ui=FALSE))),
                  fluidRow(column(width=6,
                                  checkboxInput("stochastic_lsd_normlibsize", label="normalize library sizes", value=TRUE, width="100%"),
+                                 checkboxInput("stochastic_lsd_lineagealiases", label="account for lineage aliases (multiple labels per cell)", value=TRUE, width="100%"),
                                  checkboxInput("stochastic_lsd_incpuremodel", label="show pure SAN model without PCR+Sequencing", value=FALSE, width="100%")),
                           column(width=6,
                                  checkboxInput("stochastic_nlineages_logy", label="logarithmic y-axis", value=TRUE, width="100%"))),
