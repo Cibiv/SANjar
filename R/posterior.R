@@ -19,7 +19,7 @@ san_parametrization <- function(ranges, basemodel, match.s0.to.data=TRUE, cc_day
     for.tmax <- grepl(pattern, pnames)
     # Extract rate column name(s) from the parameter names (e.g. 40SA translates to columns S, A)
     p <- pnames[for.tmax]
-    r <- gsub("0", "X", sub(pattern, "\\1", p))
+    r <- gsub("X", "0", sub(pattern, "\\1", p))
     # Create map, i.e. a vector with rate names as values and target columns as names
     k <- nchar(r)
     map <- rep(p, k)
