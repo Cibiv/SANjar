@@ -137,15 +137,18 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
 
   # Compute log-CIs for cell counts
   logcis.cc <- lt$organoidsizes[list(parametrization$cc_days), list(
-    logmean=mean(log10(cells), na.rm=TRUE),
-    logsd=sd(log10(cells), na.rm=TRUE)
+    logmean=pmax(mean(log10(cells), na.rm=TRUE), log10(min.size), na.rm=TRUE),
+    logsd=pmax(sd(log10(cells), na.rm=TRUE), min.logsd, na.rm=TRUE),
+    samples=sum(is.finite(cells))
   ), on=.(day), keyby=.EACHI]
 
   # Compute log-CIs for lineage rank-sizes
-  logcis.rs <- rank_size(lt$lineagesizes[list(parametrization$rs_days), list(day, sid, size=eval(as.name(lt$unit))), on=.(day)])[, list(
-    logmean=mean(log10(size), na.rm=TRUE),
-    logsd=sd(log10(size), na.rm=TRUE)
-  ), keyby=.(day, rank)][CJ(parametrization$rs_days, parametrization$rs_ranks)]
+  rs <- rank_size(lt$lineagesizes[list(parametrization$rs_days), list(day, sid, size=eval(as.name(lt$unit))), on=.(day)])
+  logcis.rs <- rs[CJ(day=parametrization$rs_days, rank=parametrization$rs_ranks), list(
+    logmean=pmax(mean(log10(size), na.rm=TRUE), log10(min.size), na.rm=TRUE),
+    logsd=pmax(sd(log10(size), na.rm=TRUE), min.logsd, na.rm=TRUE),
+    samples=sum(is.finite(size))
+  ), on=.(day, rank), keyby=.EACHI]
 
   # Extract days at which the rates change
   params.na <- rep(NA_real_, length(parametrization$names))
@@ -159,8 +162,9 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     r
   })
   # Prepare vectors of cell-count log-means and log-sds to compute likelihoods
-  cc_days_logmean <- pmax(logcis.cc$logmean, log10(min.size), na.rm=TRUE)
-  cc_days_logsd <- pmax(logcis.cc$logsd, min.logsd, na.rm=TRUE)
+  stopifnot(logcis.cc[, day] == unlist(cc_days))
+  cc_days_logmean <- logcis.cc$logmean
+  cc_days_logsd <- logcis.cc$logsd
   if (!all(is.finite(cc_days_logmean)) || !all(is.finite(cc_days_logsd)))
     stop("LTData does not contain sufficient organoid size data for days ",
          paste0(parametrization$cc_days[!is.finite(cc_days_logmean) | !is.finite(cc_days_logsd)],
@@ -179,14 +183,14 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   rs_days <- parametrization$rs_days
   rs_ranks <- parametrization$rs_ranks
   rs_days_logmean <- lapply(rs_days, function(rs_day) {
-    rs <- logcis.rs[day==rs_day]
-    if (all(!is.finite(rs$logmean)))
+    if (logcis.rs[day==rs_day, max(samples)] == 0)
       stop("LTData does not contain sufficient lineagesize data for day ", rs_day)
-    rs[list(rs_ranks), pmax(logmean, log10(min.size), na.rm=TRUE), on=.(rank)]
+    stopifnot(logcis.rs[day==rs_day, rank] == rs_ranks)
+    logcis.rs[day==rs_day, logmean]
   })
   rs_days_logsd <- lapply(rs_days, function(rs_day) {
-    rs <- logcis.rs[day==rs_day]
-    rs[list(rs_ranks), pmax(logsd,  min.logsd, na.rm=TRUE), on=.(rank)]
+    stopifnot(logcis.rs[day==rs_day, rank] == rs_ranks)
+    logcis.rs[day==rs_day, logsd]
   })
 
   # PCR and sequencing parameters
@@ -266,13 +270,13 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   
   # Evaluate partial log-likelihood for cellcounts
   ll_cc <- function(cc) {
-    ll.site <- -0.5 * ((log10(cc) - cc_days_logmean) / cc_days_logsd)^2
+    ll.site <- -0.5 * ((log10(pmax(cc, min.size)) - cc_days_logmean) / cc_days_logsd)^2
     sum(pmax(ll.site, ll.site.min))
   }
   
   # Evaluate partial log-likelihood for rank-sizes
   ll_rs <- function(rs, rs_i) {
-    ll.site <- -0.5 * ((log10(pmax(rs, 0.1)) - rs_days_logmean[[rs_i]]) / rs_days_logsd[[rs_i]])^2
+    ll.site <- -0.5 * ((log10(pmax(rs, min.size)) - rs_days_logmean[[rs_i]]) / rs_days_logsd[[rs_i]])^2
     sum(pmax(ll.site, ll.site.min))
   }
   
