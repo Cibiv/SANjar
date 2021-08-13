@@ -27,12 +27,14 @@ san_parametrization <- function(ranges, basemodel, match.s0.to.data=TRUE, cc_day
       names(map) <- paste0("r_", unlist(strsplit(r, split="")))
     # Check that target columns exist (II)
     if (!(all(names(map) %in% colnames(basemodel$rates))))
-      stop("invalid parameter names ", paste0(map[!(names(map) %in% colnames(basemodel$rates))], collapse=", "))
+      stop("invalid parameter names ", paste0(map[!(names(map) %in% colnames(basemodel$rates))], collapse=", "),
+           " (no such rates)")
     return(map)
   })
   # Check that all parameter names could be translated (III)
   if (!all(pnames %in% unlist(rateslist.pmap)))
-    stop("invalid parameter names ", paste0(pnames[!(pnames %in% unlist(rateslist.pmap))], collapse=", "))
+    stop("invalid parameter names ", paste0(pnames[!(pnames %in% unlist(rateslist.pmap))], collapse=", "),
+         " (no such time interval endpoints)")
 
   # Convert default ratetable into list, and replace the last Tmax by infinity
   # to allow simulations to run arbitrarily long
