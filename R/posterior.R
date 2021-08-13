@@ -142,7 +142,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   ), on=.(day), keyby=.EACHI]
 
   # Compute log-CIs for lineage rank-sizes
-  logcis.rs <- rank_size(lt$lineagesizes[list(parametrization$rs_days), list(day, sid, size=eval(lt$unit)), on=.(day)])[, list(
+  logcis.rs <- rank_size(lt$lineagesizes[list(parametrization$rs_days), list(day, sid, size=eval(as.name(lt$unit))), on=.(day)])[, list(
     logmean=mean(log10(size), na.rm=TRUE),
     logsd=sd(log10(size), na.rm=TRUE)
   ), keyby=.(day, rank)][CJ(parametrization$rs_days, parametrization$rs_ranks)]
