@@ -378,14 +378,11 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   }
   
   return(structure(list(
-    loglikelihood=loglikelihood, ll_params=ll_params,
-    cellcounts=cellcounts, ranksizes_aliases_pcrseq=ranksizes_aliases_pcrseq,
-    ll_cc=ll_cc, ll_rs=ll_rs,
-    cc_days=parametrization$cc_days, sc_days=sc_days,
-    rs_days=rs_days, rs_ranks=rs_ranks,
-    parameters=parametrization$ranges,
+    loglikelihood=loglikelihood,
     parametrization=parametrization,
-    unit=lt$unit,
-    logcis_cc=logcis.cc, logcis_rs=logcis.rs
+    parameters=parametrization$ranges,
+    data=list(cc=logcis.cc, rs=logcis.rs, unit=lt$unit),
+    arguments=list(c.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
+                   min.size=0.1, min.logsd=0.1)
   ), class="SANPosterior"))
 }
