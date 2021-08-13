@@ -1,7 +1,7 @@
 #' Plot log-normal confidence intervals defining the posterior overlayed with model predictions
 #'
 #' @export
-plot.SANPosterior <- function(posterior, params=NULL, llout=NULL) {
+plot.SANPosterior <- function(posterior, params=NULL, llout=NULL, plotlist=FALSE, ...) {
   if (is.null(llout)) {
     if (is.null(params))
       stop("either a parameter vector or the result of the posterior distribution loglikelihood function must be specified")
@@ -67,6 +67,10 @@ plot.SANPosterior <- function(posterior, params=NULL, llout=NULL) {
       ggplot2::labs(y=posterior$data$unit)
   })
   
-  # Return list of plots
-  return(c(list(p.cc), p.rs))
+  # Either return a list of plots, or arrange them in a grid with ggarrange
+  p <- c(list(p.cc), p.rs)
+  if (!plotlist)
+    return(ggpubr::ggarrange(plotlist=p, align="hv", ...))
+  else
+    return(p)
 }

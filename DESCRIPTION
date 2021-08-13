@@ -16,6 +16,7 @@ Imports:
         gwpcR,
         ggplot2,
         scales,
+        ggpubr,
         shiny,
         shinyjs,
         shinycssloaders,
