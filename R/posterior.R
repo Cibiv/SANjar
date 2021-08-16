@@ -74,7 +74,7 @@ autodetect.metaparameters <- function(parameterization, ...) UseMethod("autodete
 rateslist_s0.SANParametrization <- function(parameterization, params) {
   rl <- parameterization$rateslist.base
   rateslist.pmap <- parameterization$rateslist.pmap
-  for(i in 1:length(rl)) {
+  for(i in  seq_along(rl)) {
     m <- rateslist.pmap[[i]]
     if (length(m) > 0)
       rl[[i]][names(m)] <- params[m]
@@ -246,18 +246,17 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     t0 <- 0
     cc_list <- rep(list(NULL), length(rl))
     sc_list <- rep(list(NULL), length(rl))
-    for(ri in 1:length(rl)) {
+    for(ri in seq_along(rl)) {
       # Times (relative to the previous stopping time t0) at which to evaluate the model
       ts <- c(cc_days[[ri]] - t0, sc_days[[ri]] - t0, rl[[ri]]$Tmax - t0)
-      ti_cc <- 1:length(cc_days[[ri]])
-      ti_sc <- length(cc_days[[ri]]) + 1:length(sc_days[[ri]])
+      ti_cc <- seq_along(cc_days[[ri]])
+      ti_sc <- length(cc_days[[ri]]) + seq_along(sc_days[[ri]])
       ti_tmax <- length(ts)
       # Evaluate model
       san.out <- san_deterministic_eval_fixedrates(x0=x0, times=ts, rates=rl[[ri]])
       # Extract results (sum S, A, N to get total cellcount)
       cc_list[[ri]] <- san.out[ti_cc, c("S", "A", "N")] %*% c(1,1,1)
-      if (length(sc_days[[ri]]) > 0)
-        sc_list[[ri]] <- san.out[ti_sc, "S"]
+      sc_list[[ri]] <- unname(san.out[ti_sc, "S"])
       # Update final time and state
       x0 <- san.out[ti_tmax,]
       t0 <- rl[[ri]]$Tmax
