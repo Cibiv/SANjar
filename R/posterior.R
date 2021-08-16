@@ -197,26 +197,28 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
 
   # PCR and sequencing parameters
   rs_libsize <- as.list(lt$sequencing[list(rs_days), ceiling(median(library_size)),
-                                      on=.(day), by=.EACHI]$V1)
+                                      on=.(day), by=.EACHI, nomatch=NULL]$V1)
   rs_pcreff <- as.list(lt$sequencing[list(rs_days), median(pcr_efficiency),
-                                     on=.(day), by=.EACHI]$V1)
+                                     on=.(day), by=.EACHI, nomatch=NULL]$V1)
   rs_th <- as.list(lt$sequencing[list(rs_days), ceiling(median(phantom_threshold)),
-                                 on=.(day), by=.EACHI]$V1)
+                                 on=.(day), by=.EACHI, nomatch=NULL]$V1)
   rs_aliaslambda <- as.list(lt$sequencing[list(rs_days), tpois.lambda(median(lineage_aliases)),
-                                          on=.(day), by=.EACHI]$V1)
+                                          on=.(day), by=.EACHI, nomatch=NULL]$V1)
 
   # Result vector template
   res_ll_rs <- rep(list(NA_real_), length(rs_days))
-  names(res_ll_rs) <- paste0("ll_rs_", rs_days)
+  if (length(parametrization$rs_days) > 0)
+    names(res_ll_rs) <- paste0("ll_rs_", rs_days)
   res_cc <- rep(list(NA_real_), length(parametrization$cc_days))
   if (length(parametrization$cc_days) > 0)
-  names(res_cc) <- paste0("CC", as.character(parametrization$cc_days))
+    names(res_cc) <- paste0("CC", as.character(parametrization$cc_days))
   res_sc <- rep(list(NA_real_), length(parametrization$sc_days))
   if (length(parametrization$sc_days) > 0)
     names(res_sc) <- paste0("SC", as.character(parametrization$sc_days))
   res_rs <- rep(list(NA_real_), length(rs_days)*length(rs_ranks))
-  names(res_rs) <- as.vector(outer(rs_ranks, rs_days,
-                                   function(r, d) { paste0("RS", d, "_", r) }))
+  if (length(parametrization$rs_days) > 0)
+    names(res_rs) <- as.vector(outer(rs_ranks, rs_days,
+                                     function(r, d) { paste0("RS", d, "_", r) }))
   res <- c(list(ll_tot=0, ll_cc=NA_real_), res_ll_rs, res_cc, res_sc, res_rs)
   
   # Create environment to evaludate functions in
@@ -333,12 +335,12 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
       res[["ll_tot"]] <- (-Inf)
       return(res)
     }
-    
+
     # Evaluate stochastic SAN model and compute partial likelihoods L_rs_<day> for rank-sizes
     # Exit early if combined partial likelihoods become unreasonably small
     rt <- rbindlist(rl)
     san.out <- NULL
-    for(rs_i in 1:length(rs_days)) {
+    for(rs_i in seq_along(rs_days)) {
       rs_day <- rs_days[rs_i]
       # Evaluate model
       san.out <- tryCatch(

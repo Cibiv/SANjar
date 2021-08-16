@@ -44,7 +44,8 @@ plot.SANPosterior <- function(posterior, params=NULL, ll=NULL, plotlist=FALSE, .
   
   # Plot rank-sizes
   rs_days <- posterior$parametrization$rs_days
-  names(rs_days) <- paste0("day", rs_days)
+  if (length(rs_days) > 0)
+    names(rs_days) <- paste0("day", rs_days)
   p.rs <- lapply(rs_days, function(rs_day) {
     # Extract per-day cell counts as a table suitable for plotting
     ll.rs <- melt(ll.tab, id.vars=c("index", paste0("ll_rs_", rs_day)),
