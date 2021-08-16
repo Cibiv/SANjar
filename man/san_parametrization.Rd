@@ -7,11 +7,11 @@
 san_parametrization(
   ranges,
   basemodel,
-  match.s0.to.data = TRUE,
-  cc_days = NULL,
-  rs_days = NULL,
-  rs_ranks = NULL,
-  sc_days = NULL
+  s0 = "autodetect",
+  cc_days = "autodetect",
+  rs_days = "autodetect",
+  rs_ranks = "autodetect",
+  sc_days = "autodetect"
 )
 }
 \description{

@@ -66,7 +66,7 @@ rateslist_s0 <- function(parameterization, params) UseMethod("rateslist_s0")
 #' Adapt a SAN model parametrization (SANP instance) to a specific dataset
 #' 
 #' @export
-adapt <- function(parameterization, ...) UseMethod("adapt")
+autodetect.metaparameters <- function(parameterization, ...) UseMethod("autodetect.metaparameters")
 
 #' Convert a parameter vector to a model instance
 #' 
@@ -90,7 +90,7 @@ rateslist_s0.SANParametrization <- function(parameterization, params) {
 #' Adapt a SAN model parametrization (SANP instance) to a specific dataset
 #' 
 #' @export
-adapt.SANParametrization <- function(parameterization, lt) {
+autodetect.metaparameters.SANParametrization <- function(parameterization, lt) {
   # Auto-detect 
   if (is.na(parameterization$s0.base)) {
     day0 <- lt$organoidsizes[day==0]
@@ -140,7 +140,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     function(FUN, ...) parMLapply(cl=cluster, FUN, ...)
   
   # Fill in dataset-dependent parameters
-  parametrization <- adapt(parametrization, lt)
+  parametrization <- autodetect.metaparameters(parametrization, lt)
 
   # Compute log-CIs for cell counts
   logcis.cc <- lt$organoidsizes[list(parametrization$cc_days), list(
