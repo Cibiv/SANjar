@@ -1,12 +1,15 @@
 #' Create SAN model parametrization
 #'
 #' @export
-san_parametrization <- function(ranges, basemodel, match.s0.to.data=TRUE, cc_days=NULL, rs_days=NULL, rs_ranks=NULL, sc_days=NULL) {
+san_parametrization <- function(ranges, basemodel, s0="autodetect", cc_days="autodetect",
+                                rs_days="autodetect", rs_ranks="autodetect", sc_days="autodetect") {
   # Validate parameter names (I)
   pnames <- names(ranges)
   pvalid <- grepl("^([0-9]+)([A-Z]+)$", pnames)
   if (!all(pvalid))
     stop("invalid parameter names ", paste0(pnames[!pvalid], collapse=", "))
+  
+  s0 <- match.arg(s0, c("autodetect", "basemodel"))
   
   # Create map that translates parameter names to rate table columns
   # rateslist.pmap is a that contains as many entries as the rate table has rows, i.e.
@@ -46,12 +49,12 @@ san_parametrization <- function(ranges, basemodel, match.s0.to.data=TRUE, cc_day
     names=as.character(pnames),
     ranges=as.list(ranges),
     rateslist.base=rateslist.base,
-    s0.base=if (match.s0.to.data) NA else as.integer(basemodel$s0),
+    s0.base=if (is.character(s0) && (s0 == "autodetect")) NA else as.integer(basemodel$s0),
     rateslist.pmap=rateslist.pmap,
-    cc_days=if (!is.null(cc_days)) as.integer(cc_days) else NULL,
-    rs_days=if (!is.null(rs_days)) as.integer(rs_days) else NULL,
-    rs_ranks=if (!is.null(rs_ranks)) as.integer(rs_ranks) else NULL,
-    sc_days=if (!is.null(sc_days)) as.integer(sc_days) else NULL
+    cc_days=if (is.character(cc_days) && (cc_days == "autodetect")) NULL else as.integer(cc_days),
+    rs_days=if (is.character(rs_days) && (rs_days == "autodetect")) NULL else as.integer(rs_days),
+    rs_ranks=if (is.character(rs_ranks) && (rs_ranks == "autodetect")) NULL else as.integer(rs_ranks),
+    sc_days=if (is.character(sc_days) && (sc_days == "autodetect")) NULL else as.integer(sc_days)
   ), class="SANParametrization"))
 }
 
@@ -97,15 +100,17 @@ adapt.SANParametrization <- function(parameterization, lt) {
     message("Auto-detected s0 to be ", parameterization$s0.base)
   }
   
-  if (is.null(parameterization$cc_days)) {
+  if (is.null(parameterization$cc_days))
     parameterization$cc_days <- sort(unique(lt$organoidsizes$day))
-  }
 
   if (is.null(parameterization$rs_days))
     parameterization$rs_days <- sort(unique(lt$lineagesizes$day))
 
   if (is.null(parameterization$rs_ranks))
     parameterization$rs_ranks <- c(1, 2, 5, 10, 15, 25, 40, 60, 100, 150, 250, 400, 600, 1000, 1500, 2500, 4000, 6000, 10000, 15000, 25000)
+
+  if (is.null(parameterization$sc_days))
+    parameterization$sc_days <- parameterization$rs_days
   
   return(parameterization)
 }
