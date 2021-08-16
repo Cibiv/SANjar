@@ -6,7 +6,7 @@
 #' @return a `data.table` containing the grouping columns, `rank` (lineage size rank) and `size` (lineage size)
 rank_size <- function(data, groups=c("day", "sid")) {
   r <- data[, {
-    .SD[order(size, decreasing=TRUE)][, list(rank=1:.N, size)]
+    .SD[order(size, decreasing=TRUE)][, list(rank=seq_along(size), size)]
   }, by=groups]
   setkeyv(r, c(groups, "rank"))
   r
