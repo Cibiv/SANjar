@@ -1,19 +1,40 @@
+plot.data <- function(posterior, data) {
+  pars <- names(posterior$parameters)
+  aux <-  c(posterior$auxiliary$ll, posterior$auxiliary$cc, posterior$auxiliary$sc, posterior$auxiliary$rs)
+  if ("SANMCMC" %in% class(data)) {
+    # Collect auxiliary data columns
+    data$final[, c("ll", aux), with=FALSE]
+  } else if ("data.table" %in% class(data)) {
+    if (all(c("ll_tot", aux) %in% colnames(data)))
+      # Collect auxiliary data columns
+      data[, c("ll_tot", aux), with=FALSE]
+    else if (all(pars %in% colnames(data)))
+      # Collect parameter columns and re-simulate model
+      posterior$loglikelihood(data[, pars, with=FALSE])
+    else
+      stop("data must contains either all parameters or all auxiliary data columns from the posterior")
+  } else {
+    # Make sure that x has two dimensions,
+    data <- rbind(data)
+    if (all(c("ll_tot", aux) %in% colnames(data)))
+      # Collect auxiliary data columns
+      data[, c("ll_tot", aux)]
+    else if (all(pars %in% colnames(data)))
+      # Collect parameter columns and re-simulate model
+      posterior$loglikelihood(data[, pars])
+    else
+      stop("data must contains either all parameters or all auxiliary data columns from the posterior")
+  }
+}
+
 #' Plot log-normal confidence intervals defining the posterior overlayed with model predictions
 #'
 #' @export
-plot.SANPosterior <- function(posterior, params=NULL, ll=NULL, plotlist=FALSE, ...) {
-  if (is.null(ll)) {
-    if (is.null(params))
-      stop("either a parameter vector or the result of the posterior distribution loglikelihood function must be specified")
-    message("ll not specified, evaluating model for parameters ",
-            paste0(colnames(params), "=", signif(params, 3), collapse=", "))
-    ll <- posterior$loglikelihood(params)
-  }
-  
-  # Convert output of loglikelihood function into a data.table  
-  ll.tab <- as.data.table(ll)
-  ll.tab[, index := 1:.N ]
-  
+plot.SANPosterior <- function(posterior, data, params=NULL, ll=NULL, plotlist=FALSE, ...) {
+  # Convert input data (MCMC results, parameter vector or result of posterior$loglikelihood) into usable form
+  data <- as.data.table(plot.data(posterior, data))
+  data[, index := 1:.N ]
+
   # Nicer log-scales
   make_scale_log10 <- function(scale, ...) scale(
     breaks = scales::trans_breaks("log10", function(x) 10^x),
@@ -27,7 +48,7 @@ plot.SANPosterior <- function(posterior, params=NULL, ll=NULL, plotlist=FALSE, .
   midpoint <- function(x) sum(range(log_ll$transform(x)))/2
   
   # Extract per-day cell counts as a table suitable for plotting
-  ll.cc <- melt(ll.tab, id.vars=c("index", "ll_cc"),
+  ll.cc <- melt(data, id.vars=c("index", "ll_cc"),
                 measure.vars=paste0("CC", posterior$parametrization$cc_days))[, day := {
                   as.integer(sub("^CC([0-9]+)$", "\\1", variable))
                 }]
@@ -48,7 +69,7 @@ plot.SANPosterior <- function(posterior, params=NULL, ll=NULL, plotlist=FALSE, .
     names(rs_days) <- paste0("day", rs_days)
   p.rs <- lapply(rs_days, function(rs_day) {
     # Extract per-day cell counts as a table suitable for plotting
-    ll.rs <- melt(ll.tab, id.vars=c("index", paste0("ll_rs_", rs_day)),
+    ll.rs <- melt(data, id.vars=c("index", paste0("ll_rs_", rs_day)),
                   measure.vars=paste0("RS", rs_day, "_", posterior$parametrization$rs_ranks))
     ll.rs <- ll.rs[, c("ll_rs", "day", "rank") := {
       list(eval(as.name(paste0("ll_rs_", rs_day))),
@@ -81,24 +102,22 @@ plot.SANPosterior <- function(posterior, params=NULL, ll=NULL, plotlist=FALSE, .
 #' Combine the plots from all components of a combined posterior distribution
 #' 
 #' @export
-plot.SANCombinedPosterior <-  function(posterior, params=NULL, ll=NULL, plotlist=FALSE, ...) {
+plot.SANCombinedPosterior <-  function(posterior, data, plotlist=FALSE, ...) {
+  # Convert input data (MCMC results, parameter vector or result of posterior$loglikelihood) into usable form
+  data <- as.data.table(plot.data(posterior, data))
+
+  # Plot individual components
   ls <- names(posterior$components)
   names(ls) <- ls
   p <- do.call(c, lapply(ls, function(l) {
-    # If only parameters, no loglikelihood output was specified, simply pass the params
-    # on to the individual plotting method
-    if (is.null(ll))
-      return(plot(posterior$components[[l]], params=params, plotlist=TRUE))
-    
-    # Otherwise, extract the columns beloning to the current component from the loglikelihood
-    # output (format is <componentlabel>.<colname>), and remove the prefix
-    l.prefix <- paste0(l, ".")
-    ll.cols <- colnames(ll)
-    ll.cols.comp <- ll.cols[startsWith(ll.cols, l.prefix)]
-    ll.comp <- ll[, ll.cols.comp, with=FALSE]
-    colnames(ll.comp) <- substr(ll.cols.comp, start=nchar(l.prefix)+1, stop=nchar(ll.cols.comp))
+    # Extract the columns belonging to the current component from the data.
+    prefix <- paste0(l, ".")
+    cols <- colnames(data)
+    cols.comp <- cols[startsWith(cols, prefix)]
+    data.comp <- data[, cols.comp, with=FALSE]
+    colnames(data.comp) <- substr(cols.comp, start=nchar(prefix)+1, stop=nchar(cols.comp))
     # Call the component's plotting function
-    plot(posterior$components[[l]], ll=ll.comp, plotlist=TRUE)
+    plot(posterior$components[[l]], data.comp, plotlist=TRUE)
   }))
   
   # Either return a list of plots, or arrange them in a grid with ggarrange
