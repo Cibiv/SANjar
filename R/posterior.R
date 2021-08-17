@@ -222,6 +222,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   env$res <- res
   env$res_ll_rs <- res_ll_rs
   env$res_cc <- res_cc
+  env$res_sc <- res_sc
   env$res_rs <- res_rs
 
   # Compute cellcounts
