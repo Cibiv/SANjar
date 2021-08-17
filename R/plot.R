@@ -3,7 +3,9 @@ plot.data <- function(posterior, data) {
   aux <-  c(posterior$auxiliary$ll, posterior$auxiliary$cc, posterior$auxiliary$sc, posterior$auxiliary$rs)
   if ("SANMCMC" %in% class(data)) {
     # Collect auxiliary data columns
-    data$final[, c("ll", aux), with=FALSE]
+    d <- data$final[, c("ll", aux), with=FALSE]
+    colnames(d)[1] <- "ll_tot"
+    d
   } else if ("data.table" %in% class(data)) {
     if (all(c("ll_tot", aux) %in% colnames(data)))
       # Collect auxiliary data columns
