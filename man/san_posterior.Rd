@@ -11,8 +11,7 @@ san_posterior(
   p.cutoff = 0.01,
   ll.site.min = -Inf,
   min.size = 0.1,
-  min.logsd = 0.1,
-  cluster = NULL
+  min.logsd = 0.1
 )
 }
 \description{

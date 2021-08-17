@@ -119,26 +119,8 @@ autodetect.metaparameters.SANParametrization <- function(parameterization, lt) {
 #' 
 #' @export
 san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
-                         min.size=0.1, min.logsd=0.1, cluster=NULL)
+                         min.size=0.1, min.logsd=0.1)
 {
-  # Setup cluster
-  if (!is.null(cluster)) {
-    clusterEvalQ(cluster, {
-      library(OpenMPController)
-      library(data.table)
-      library(SANjar)
-      library(gwpcR)
-      
-      # No nested parallelism
-      data.table::setDTthreads(1)
-      OpenMPController::omp_set_num_threads(1)
-    })
-  }
-  MLapply <- if (is.null(cluster)) {
-    function(FUN, ...) mapply(FUN, ..., SIMPLIFY=FALSE)
-  } else
-    function(FUN, ...) parMLapply(cl=cluster, FUN, ...)
-  
   # Fill in dataset-dependent parameters
   parametrization <- autodetect.metaparameters(parametrization, lt)
 
@@ -228,6 +210,8 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   
   # Create environment to evaludate functions in
   env <- new.env()
+  env$is.parameter.vector <- is.parameter.vector
+  env$is.parameter.matrix <- is.parameter.matrix
   env$cc_days <- cc_days
   env$cc_days_logmean <- cc_days_logmean
   env$cc_days_logsd <- cc_days_logsd
@@ -311,7 +295,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   env$ll_rs <- ll_rs
   
   # Evaluate total log-likelihood for a single rate vector
-  ll_params <- function(params, ll_cutoff) {
+  ll_evaluate <- function(params, ll_cutoff) {
     # Get initial cell count and rates table
     m <- rateslist_s0(parametrization, params)
     rl <- m$rateslist
@@ -400,13 +384,17 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     
     return(res)
   }
-  environment(ll_params) <- env
-  env$ll_params <- ll_params
+  environment(ll_evaluate) <- env
+  env$ll_evaluate <- ll_evaluate
   
   # Evaluate total log-likelihood for each row of the matrix `params`
   loglikelihood <- function(params, cutoffs=-Inf) {
-    stopifnot((length(cutoffs) == 1) || (length(cutoffs) == nrow(params)))
-    rbindlist(MLapply(ll_params, asplit(params, MARGIN=1), as.list(cutoffs)))
+    stopifnot(is.parameter.vector(params) || is.parameter.matrix(params))
+    stopifnot((length(cutoffs) == 1) || (is.parameter.matrix(params) && (length(cutoffs) == nrow(params))))
+    if (is.parameter.vector(params))
+      ll_evaluate(params, cutoffs)
+    else
+      rbindlist(mapply(ll_evaluate, asplit(params, MARGIN=1), as.list(cutoffs), SIMPLIFY=FALSE))
   }
   environment(loglikelihood) <- env
   env$loglikelihood <- loglikelihood
@@ -428,7 +416,7 @@ san_posterior_combine <- function(...) {
   # Get individual posterior objects
   components <- list(...)
   if (is.null(names(components)) || any(names(components) == "") || !all(sapply(components, function(p) "SANPosterior" %in% class(p))))
-    stop("arguments of san_posterior_combine() must be named and must have been created with san_posterior()")
+    stop("arguments of san_posterior_combine() must be named and must be instances of SANPosterior (e.g. created with san_posterior())")
 
   # Check that the parameters are the same
   parameters <- NULL
@@ -442,17 +430,25 @@ san_posterior_combine <- function(...) {
   
   # Create environment to evaludate functions in
   env <- new.env()
+  env$is.parameter.vector <- is.parameter.vector
+  env$is.parameter.matrix <- is.parameter.matrix
   env$loglikelihoods <- lapply(components, function(p) p$loglikelihood)
     
   # Evaluate total log-likelihood for each row of the matrix `params`
   loglikelihood <- function(params, cutoffs=-Inf) {
+    stopifnot(is.parameter.vector(params) || is.parameter.matrix(params))
+    stopifnot((length(cutoffs) == 1) || (is.parameter.matrix(params) && (length(cutoffs) == nrow(params))))
     # Evaluate individual posterior likelihoods
     lls <- lapply(loglikelihoods, function(ll) ll(params, cutoffs) )
     # Compute total likelihood
     ll_tot <- Reduce(function(ll_tot, ll) ll_tot + ll$ll_tot, lls, 0)
-    # Return table containing the total likelihood and all meta-data from all
-    # individual likelihoods, with column names prefixed with the likelihood label
-    do.call(cbind, c(list(data.table(ll_tot)), lls))
+    # Return either list or table containing the total likelihood and all meta-data from
+    # all individual likelihoods, with column names prefixed with the likelihood label
+    result <- c(list(ll_tot=ll_tot), lls)
+    if (is.parameter.vector(params))
+      do.call(c, result)
+    else
+      do.call(cbind, result)
   }
   environment(loglikelihood) <- env
   env$loglikelihood <- loglikelihood
@@ -461,5 +457,59 @@ san_posterior_combine <- function(...) {
     loglikelihood=loglikelihood,
     parameters=parameters,
     components=components
-  ), class="SANCombinedPosterior"))
+  ), class=c("SANCombinedPosterior", "SANPosterior")))
+}
+
+#' Parallelizes likelihood evaluations for different parameter combinations
+#' 
+#' @export
+san_posterior_parallel <- function(posterior, cluster) {
+  if (!("SANPosterior" %in% class(posterior)))
+    stop("posterior argument must be an instance of SANPosterior (e.g. created with san_posterior())")
+
+  # Setup cluster
+  clusterEvalQ(cluster, {
+    library(OpenMPController)
+    library(data.table)
+    library(SANjar)
+    library(gwpcR)
+    
+    # No nested parallelism
+    data.table::setDTthreads(1)
+    OpenMPController::omp_set_num_threads(1)
+  })
+
+  # Create environment to evaluate functions in
+  env <- new.env()
+  env$is.parameter.vector <- is.parameter.vector
+  env$is.parameter.matrix <- is.parameter.matrix
+  env$cluster <- cluster
+
+  # Serial log-likelihood evaluation function
+  env$loglikelihood.serial <- posterior$loglikelihood
+
+  # Parallel log-likelihood function
+  loglikelihood <- function(params, cutoffs=-Inf) {
+    stopifnot(is.parameter.vector(params) || is.parameter.matrix(params))
+    stopifnot((length(cutoffs) == 1) || (is.parameter.matrix(params) && (length(cutoffs) == nrow(params))))
+    if (is.parameter.vector(params))
+      loglikelihood.serial(params, cutoffs)
+    else
+      rbindlist(parMLapply(cl=cluster, loglikelihood.serial, asplit(params, MARGIN=1), as.list(cutoffs)))
+  }
+  environment(loglikelihood) <- env
+  env$loglikelihood <- loglikelihood
+  
+  # Replace log-likelihood function with parallel version
+  posterior$loglikelihood <- loglikelihood
+  
+  return(posterior)
+}
+
+is.parameter.vector <- function(x) {
+  is.vector(x) || (is.array(x) && (length(dim(x)) == 1))
+}
+
+is.parameter.matrix <- function(x) {
+  is.data.table(x) || (is.array(x) && (length(dim(x)) == 2))
 }
