@@ -4,7 +4,7 @@
 \alias{plot.SANCombinedPosterior}
 \title{Combine the plots from all components of a combined posterior distribution}
 \usage{
-\method{plot}{SANCombinedPosterior}(posterior, params = NULL, ll = NULL, plotlist = FALSE, ...)
+\method{plot}{SANCombinedPosterior}(posterior, data, plotlist = FALSE, ...)
 }
 \description{
 Combine the plots from all components of a combined posterior distribution
