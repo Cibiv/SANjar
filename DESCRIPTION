@@ -13,6 +13,7 @@ Imports:
         data.table,
         lamW,
         matrixStats,
+        ks,
         gwpcR,
         ggplot2,
         scales,
