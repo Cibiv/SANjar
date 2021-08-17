@@ -404,6 +404,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     loglikelihood=loglikelihood,
     parametrization=parametrization,
     parameters=parametrization$ranges,
+    auxiliary=list(ll=c("ll_cc", names(res_ll_rs)), cc=names(res_cc), sc=names(res_sc), rs=names(res_rs)),
     data=list(cc=logcis.cc, rs=logcis.rs, unit=lt$unit),
     arguments=list(c.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
                    min.size=0.1, min.logsd=0.1)
@@ -443,8 +444,8 @@ san_posterior_combine <- function(...) {
     lls <- lapply(loglikelihoods, function(ll) ll(params, cutoffs) )
     # Compute total likelihood
     ll_tot <- Reduce(function(ll_tot, ll) ll_tot + ll$ll_tot, lls, 0)
-    # Return either list or table containing the total likelihood and all meta-data from
-    # all individual likelihoods, with column names prefixed with the likelihood label
+    # Return either list or table containing the total likelihood and all auxiliary data
+    # from all individual likelihoods, with column names prefixed with the likelihood label
     result <- c(list(ll_tot=ll_tot), lls)
     if (is.parameter.vector(params))
       do.call(c, result)
@@ -457,6 +458,10 @@ san_posterior_combine <- function(...) {
   return(structure(list(
     loglikelihood=loglikelihood,
     parameters=parameters,
+    auxiliary=list(ll=unlist(lapply(names(components), function(n) paste0(n, ".", c("ll_tot", components[[n]]$auxiliary$ll)))),
+                   cc=unlist(lapply(names(components), function(n) paste0(n, ".", components[[n]]$auxiliary$cc))),
+                   rs=unlist(lapply(names(components), function(n) paste0(n, ".", components[[n]]$auxiliary$sc))),
+                   sc=unlist(lapply(names(components), function(n) paste0(n, ".", components[[n]]$auxiliary$rs)))),
     components=components
   ), class=c("SANCombinedPosterior", "SANPosterior")))
 }
