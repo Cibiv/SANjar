@@ -52,12 +52,17 @@ plot.SANPosterior <- function(posterior, data, params=NULL, ll=NULL, plotlist=FA
                 measure.vars=paste0("CC", posterior$parametrization$cc_days))[, day := {
                   as.integer(sub("^CC([0-9]+)$", "\\1", variable))
                 }]
-  
+  # Index groups in order of increasing likelihood to plot likelist trajectories on top
+  i <- 0
+  ll.cc[ll.cc[order(ll_cc), list(index=unique(index))]
+        , index_ll := {i <<- i + 1}
+        , on=.(index), by=.EACHI]
+
   # Plot total organoid sizes
   p.cc <- ggplot2::ggplot() +
     ggplot2::geom_errorbar(data=posterior$data$cc, ggplot2::aes(x=day, ymin=10^(logmean-logsd), ymax=10^(logmean+logsd))) +
     ggplot2::geom_line(data=ll.cc, ggplot2::aes(x=day, y=pmax(value, posterior$arguments$min.size),
-                                                color=ll_cc, group=index)) +
+                                                color=ll_cc, group=index_ll)) +
     make_scale_log10(ggplot2::scale_y_log10) +
     ggplot2::scale_color_gradient2(name=expression(log~L), trans=log_ll,
                                    low="red", mid="green", midpoint=midpoint(ll.cc$ll_cc), high="blue") +
@@ -76,13 +81,18 @@ plot.SANPosterior <- function(posterior, data, params=NULL, ll=NULL, plotlist=FA
            rs_day,
            as.integer(sub(paste0("^RS", rs_day, "_([0-9]+)$"), "\\1", variable)))
     }]
-    
+    # Index groups in order of increasing likelihood to plot likelist trajectories on top
+    i <- 0
+    ll.rs[ll.rs[order(ll_rs), list(index=unique(index))]
+          , index_ll := {i <<- i + 1}
+          , on=.(index), by=.EACHI]
+
     # Plot
     ggplot2::ggplot() +
       ggplot2::geom_errorbar(data=posterior$data$rs[day==rs_day],
                              ggplot2::aes(x=rank, ymin=10^(logmean-logsd), ymax=10^(logmean+logsd))) +
       ggplot2::geom_line(data=ll.rs, ggplot2::aes(x=rank, y=pmax(value, posterior$arguments$min.size),
-                                                  color=ll_rs, group=index)) +
+                                                  color=ll_rs, group=index_ll)) +
       ggplot2::annotate("text", x=Inf, y=Inf, hjust=1, vjust=1, col="black", label=paste0("day ", rs_day)) +
       make_scale_log10(ggplot2::scale_x_log10) +
       make_scale_log10(ggplot2::scale_y_log10) +
