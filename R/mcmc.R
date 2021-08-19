@@ -1,6 +1,9 @@
 library(data.table)
 library(mvtnorm)
 
+#' The MCMC results for the LT47 dataset
+"lt47.mcmc"
+
 #' Samples from a distribution using the Metropolis-Hastings MCMC algorithm  
 #' 
 #' @export

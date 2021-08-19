@@ -1,3 +1,4 @@
 data-raw/lt47_h9_only.tsv filter=lfs diff=lfs merge=lfs -text
 data/lineagetracing_H9_only.tsv filter=lfs diff=lfs merge=lfs -text
 data/lt47.RData filter=lfs diff=lfs merge=lfs -text
+data-raw/lt47.mcmcabc.1000chains1000accepts.noreeval.initnorep.minrprop02.maxcorr095.nohistory.rd filter=lfs diff=lfs merge=lfs -text
