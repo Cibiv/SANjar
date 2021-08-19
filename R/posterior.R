@@ -209,9 +209,14 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   res <- c(list(ll_tot=0, ll_cc=NA_real_), res_ll_rs, res_cc, res_sc, res_rs)
   
   # Create environment to evaludate functions in
-  env <- new.env()
-  env$is.parameter.vector <- is.parameter.vector
-  env$is.parameter.matrix <- is.parameter.matrix
+  env <- new.env(parent=.SANjar.env)
+  env$parametrization <- parametrization
+  env$cc.cutoff <- cc.cutoff
+  env$p.cutoff <- p.cutoff
+  env$ll.site.min <- ll.site.min
+  env$min.size <- min.size
+  env$min.logsd <- min.logsd
+  env$unit <- lt$unit
   env$cc_days <- cc_days
   env$cc_days_logmean <- cc_days_logmean
   env$cc_days_logsd <- cc_days_logsd
@@ -219,11 +224,16 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   env$rs_ranks <- rs_ranks
   env$rs_days_logmean <- rs_days_logmean
   env$rs_days_logsd <- rs_days_logsd
+  env$sc_days <- sc_days
   env$res <- res
   env$res_ll_rs <- res_ll_rs
   env$res_cc <- res_cc
   env$res_sc <- res_sc
   env$res_rs <- res_rs
+  env$rs_libsize <- rs_libsize
+  env$rs_pcreff <- rs_pcreff
+  env$rs_th <- rs_th
+  env$rs_aliaslambda <- rs_aliaslambda
 
   # Compute cellcounts
   cellcounts <- function(s0, rl) {
@@ -266,10 +276,10 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
                        efficiency=rs_pcreff[[param_i]])
     # Apply threshold, set read count to zero for filtered lineages
     ls.reads[ls.reads < rs_th[[param_i]]] <- 0
-    if (lt$unit == "cells") {
+    if (unit == "cells") {
       # Normalize reads to cells to produce observed lineage sizes
       ls.obs <- ls.reads * sum(ls.labs) / (rs_libsize[[param_i]])
-    } else if (lt$unit == "reads") {
+    } else if (unit == "reads") {
       # Use raw number of reads as "observed lineage size"
       ls.obs <- ls.reads
     }
@@ -358,7 +368,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
                   "  Parameters: ", paste0(names(params), "=", signif(params, 6), collapse=", "), "\n",
                   "  Dump: ", f)
           tryCatch(
-            save(san.out, params, rs_day, rs_i, rs_libsize, rs_pcreff, rs_th, lt$unit, rs_ranks,
+            save(san.out, params, rs_day, rs_i, rs_libsize, rs_pcreff, rs_th, unit, rs_ranks,
                  file=f),
             error=function(e) {
               warning("Unable to dump to file ", f)
@@ -430,10 +440,8 @@ san_posterior_combine <- function(...) {
       stop("posterior distributions to be combined must have the same parameters")
   }
   
-  # Create environment to evaludate functions in
-  env <- new.env()
-  env$is.parameter.vector <- is.parameter.vector
-  env$is.parameter.matrix <- is.parameter.matrix
+  # Create environment to evaluate functions in
+  env <- new.env(parent=.SANjar.env)
   env$loglikelihoods <- lapply(components, function(p) p$loglikelihood)
     
   # Evaluate total log-likelihood for each row of the matrix `params`
@@ -486,9 +494,7 @@ san_posterior_parallel <- function(posterior, cluster) {
   })
 
   # Create environment to evaluate functions in
-  env <- new.env()
-  env$is.parameter.vector <- is.parameter.vector
-  env$is.parameter.matrix <- is.parameter.matrix
+  env <- new.env(parent=.SANjar.env)
   env$cluster <- cluster
 
   # Serial log-likelihood evaluation function
@@ -519,3 +525,5 @@ is.parameter.vector <- function(x) {
 is.parameter.matrix <- function(x) {
   is.data.table(x) || (is.array(x) && (length(dim(x)) == 2))
 }
+
+.SANjar.env <- parent.frame()$envir
