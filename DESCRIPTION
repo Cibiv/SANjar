@@ -13,6 +13,7 @@ Imports:
         data.table,
         lamW,
         matrixStats,
+        extraDistr,
         ks,
         mvtnorm,
         gwpcR,
