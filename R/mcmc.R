@@ -1,15 +1,27 @@
-library(data.table)
-library(mvtnorm)
-
 #' The MCMC results for the LT47 dataset
 "lt47.mcmc"
+
+#' Find a suitable bandwidth matrix for kernel density estimation 
+#' 
+#' @export
+bandwidth.matrix <- function(x, ...) UseMethod("bandwidth.matrix")
+
+#' Locates the distribution's mode(s) using the mean-shift algorithm
+#'
+#' @export
+locate.modes <- function(x, ...) UseMethod("locate.modes")
+
+#' Computes various summary statistics
+#' 
+#' @export
+summarystats <- function(x, ...) UseMethod("summarystats")
 
 #' Samples from a distribution using the Metropolis-Hastings MCMC algorithm  
 #' 
 #' @export
-mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
-                 initial.samples=chains, initial.withreplacement=FALSE, initial.states=NULL,
-                 keep.history=FALSE, keep.initial=FALSE, keep.uniform=FALSE,
+mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.samples=chains,
+                 candidates=NULL, initial.samplewithreplacement=FALSE, initial=NULL, 
+                 keep.history=FALSE, keep.initial=FALSE, keep.candidates=FALSE,
                  reevaluate.likelihood=FALSE, acceptance.target=0.234,
                  initial.Rproposal=1.0, minimal.Rproposal=0.2,
                  initial.Vproposal=NULL, minimal.Vproposal.CV=0.1, maximal.Vproposal.corr=0.95,
@@ -26,88 +38,96 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
   varnames <- names(variables)
   names(varnames) <- varnames
   
-  parameter.samples <- function(n) {
-    as.data.table(c(list(ll=NA_real_), lapply(varnames, function(v) {
-      runif(n, min=variables[[v]][1], max=variables[[v]][2])
-    })))
-  }
-  
   # Initial state distribution
-  if (is.null(initial.states)) {
-    # Initial approximation (ABC-like).
-    # To improve performance, we try to determine a reasonable initial.ll.cutoff value
+  if (is.null(initial)) {
+    if (is.null(candidates)) {
+      # Sample parameter space
+      if (verbose)
+        message("Generating ", candidate.samples, " initial samples")
+      candidates <- sample.variables(candidate.samples, variables)
+    }
+    # Determine initial.ll.cutoff
     if (is.na(initial.ll.cutoff)) {
-      preinitial.samples <- ceiling(sqrt(initial.samples))
+      candidates.cutoffest <- candidates[1:ceiling(sqrt(.N))]
       if (verbose)
-        message("Generating ", preinitial.samples, " parameter samples to estimate initial.ll.cutoff")
-      preinitial <- parameter.samples(preinitial.samples)
-      if (verbose)
-        message("Evaluating posterior likelihood for ", preinitial.samples, " parameter samples to estimate initial.ll.cutoff")
-      r <- as.data.table(llfun(preinitial[, varnames, with=FALSE], cutoffs=-Inf))
+        message("Evaluating posterior likelihood for ", nrow(candidates.cutoffest), " candidate samples to estimate initial.ll.cutoff")
+      r <- llfun(candidates.cutoffest, cutoffs=-Inf)
       initial.ll.cutoff <- max(r[, 1])
     }
-    # Sample parameter space uniformly, evaluate posterior likelihood, and re-sample according to this likelihood.
+    # Evaluate likelihood
     if (verbose)
-      message("Generating ", initial.samples, " initial parameter samples")
-    uniform <- parameter.samples(initial.samples)
-    if (verbose)
-      message("Evaluating posterior likelihood for ", initial.samples, " initial parameter samples ",
+      message("Evaluating posterior likelihood for ", nrow(candidates), " candidate samples ",
               "with initial.ll.cutoff ", signif(initial.ll.cutoff, 3))
-    r <- as.data.table(llfun(uniform[, varnames, with=FALSE], cutoffs=initial.ll.cutoff))
+    r <- as.data.table(llfun(candidates, cutoffs=initial.ll.cutoff))
+    r.ll <- r[[ colnames(r)[1] ]]
     if (ncol(r) > 1)
-      meta <- r[, 2:ncol(r)]
+      candidates.meta <- r[, 2:ncol(r)]
     else
-      meta <- NULL
-    uniform[, ll := r[, 1]]
-    # Remove sample with likelihood -infinity
-    ll.finite <- is.finite(uniform$ll)
-    uniform <- uniform[ll.finite]
-    if (!is.null(meta))
-      meta <- meta[ll.finite]
-
-    if (nrow(uniform) == 0)
-      stop("No parameter sample had finite likelihood, aborting")
+      candidates.meta <- NULL
+    # Remove samples with log-likelihood -infinity
+    r.ll.finite <- is.finite(r.ll)
+    candidates <- candidates[r.ll.finite]
+    candidates[, ll := r.ll[r.ll.finite] ]
+    if (!is.null(candidates.meta))
+      candidates.meta <- candidates.meta[r.ll.finite]
+    if (nrow(candidates) == 0)
+      stop("No candidate sample had finite likelihood, aborting")
+    # Remove samples whose log-likelihood is too small to yield a positive probability when
+    # exponentiated Since the latter could, in principle, affect *all* likelihoods,
+    # log-likelihoods are normalized to make the largest log-likelihood 1 before exponentiation.
+    # Since likelihoods are only defined up to a constant scaling factor, this additional#
+    # scaling does not affect the results.
+    ll.max <- candidates[, max(ll)]
+    candidates[, ll.norm.exp :=  exp(ll-ll.max) ]
+    ll.norm.exp.positive <- candidates[, (ll.norm.exp > 0)]
+    candidates <- candidates[ll.norm.exp.positive]
+    if (!is.null(candidates.meta))
+      candidates.meta <- candidates.meta[ll.norm.exp.positive]
     if (verbose) {
-      message("The following ", nrow(uniform), " samples are usable:")
-      message(paste0("  ", capture.output(print(signif(uniform, 3))), collapse="\n"))
+      message("The following ", nrow(candidates), " candidate samples are usable:")
+      message(paste0("  ", capture.output(print(signif(candidates, 3))), collapse="\n"))
     }
-
     # Sample initial states accordingly to likelihood from the uniformly spaced samples
-    if (verbose)
-      message("Selecting initial states for ", chains, " chains from ", nrow(uniform), " initial parameter samples")
-    if (initial.withreplacement) {
+    if (initial.samplewithreplacement) {
       # Sample the initial states
-      i <- uniform[, sample.int(.N, size=chains, prob=exp(ll), replace=TRUE) ]
+      if (verbose)
+        message("Sampling initial states for ", chains, " chains from ", nrow(candidates), " candidates with replacement")
+      i <- candidates[, sample.int(.N, size=chains, prob=ll.norm.exp, replace=TRUE) ]
     } else {
       # Repeat existing sample often enough to not run out of samples when sampling the initial states
-      k <- ceiling(chains / sum(exp(uniform$ll) > 0))
-      uniform <- rbindlist(rep(list(uniform), k))
-      if (!is.null(meta))
-        meta <- rbindlist(rep(list(meta), k))
+      k <- ceiling(chains / nrow(candidates))
+      if (verbose)
+        message("Sampling initial states for ", chains, " chains from ", nrow(candidates), " candidates, ",
+                "using each candidate at most ", k, " times")
+      candidates <- rbindlist(rep(list(candidates), k))
+      if (!is.null(candidates.meta))
+        candidates.meta <- rbindlist(rep(list(candidates.meta), k))
       # Sample the initial states *without* replacement
       # The idea is that this ensures a reasonable dispersion of initial values
-      i <- uniform[, sample.int(.N, size=chains, prob=exp(ll), replace=FALSE) ]
+      i <- candidates[, sample.int(.N, size=chains, prob=ll.norm.exp, replace=FALSE) ]
     } 
-    initial.states <- uniform[i, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", varnames), with=FALSE]) ]
-    if (!is.null(meta))
-      initial.meta <- meta[i]
+    initial <- candidates[i, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", varnames), with=FALSE]) ]
+    if (!is.null(candidates.meta))
+      initial.meta <- candidates.meta[i]
     else
       initial.meta <- NULL
   } else {
-    uniform <- NULL
-    if (!missing(chains) && (chains != nrow(initial.states)))
-      warning("Number of initial states (", nrow(initial.states), ") overrides specified number of chains (", chains, ")")
-    chains <- nrow(initial.states)
-    if (ncol(initial.states) > (length(varnames) + 1))
-      initial.meta <- initial.states[, .SD, .SDcols=!c("ll", varnames)]
+    # Initial states were specified
+    if (!is.null(candidates))
+      warning("Initial states were specified, provided candidates not being used")
+    if (!missing(chains) && (chains != nrow(initial)))
+      warning("Number of initial states (", nrow(initial), ") overrides specified number of chains (", chains, ")")
+    chains <- nrow(initial)
+    if (ncol(initial) > (length(varnames) + 1))
+      initial.meta <- initial[, .SD, .SDcols=!c("ll", varnames)]
     else
       initial.meta <- NULL
-    initial.states <- initial.states[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", varnames), with=FALSE]) ]
+    initial <- initial[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", varnames), with=FALSE]) ]
   }
   if (verbose) {
     message("Initial states")
-    initial.states.signif <- initial.states[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
-    message(paste0("  ", capture.output(print(initial.states.signif)), collapse="\n"))
+    initial.signif <- initial[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
+    message(paste0("  ", capture.output(print(initial.signif)), collapse="\n"))
   }
   
   # Initialize proposal distribution
@@ -115,10 +135,10 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
   # the initial covariance estimate using all samples and their likelihoods, since
   # this gives a more precise estimate than using just the initial states.
   Vproposal <- if (is.null(initial.Vproposal)) {
-    if (is.null(initial.states))
-      cov.wt(uniform[, varnames, with=FALSE], wt=exp(uniform$ll))$cov
+    if (!is.null(candidates))
+      cov.wt(candidates[, varnames, with=FALSE], wt=candidates$ll.norm.exp, method="ML")$cov
     else
-      cov(initial.states[, varnames, with=FALSE])
+      cov(initial[, varnames, with=FALSE])
   } else
     initial.Vproposal
   Rproposal <- initial.Rproposal
@@ -131,7 +151,7 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
   }
   
   # Setup MCMC variables
-  states <- initial.states
+  states <- initial
   states.meta <- initial.meta
   if (keep.history) {
     history <- list(states[, c(list(step=0), .SD) ])
@@ -213,7 +233,7 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
     # Generate proposals by sampling displacements using current covariances and radius,
     # and displacing the previous samples accordingly. We only really generate proposals
     # for chains that need extension.
-    displacements <- rmvnorm(n=sum(extend), sigma=Vproposal) * Rproposal
+    displacements <- mvtnorm::rmvnorm(n=sum(extend), sigma=Vproposal) * Rproposal
     colnames(displacements) <- names(varnames)
     proposals <- data.table(valid=extend)
     proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
@@ -303,19 +323,20 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
   # Return result
   result.data <- list(
     variables=variables,
+    llfun=llfun,
     arguments=list(
-      steps=steps, accepts=accepts, chains=chains,
-      initial.withreplacement=initial.withreplacement, reevaluate.likelihood=reevaluate.likelihood,
-      acceptance.target=acceptance.target,
+      steps=steps, accepts=accepts, chains=chains, candidate.samples=chains,
+      initial.samplewithreplacement=initial.samplewithreplacement,
+      reevaluate.likelihood=reevaluate.likelihood, acceptance.target=acceptance.target,
       initial.Rproposal=initial.Rproposal, minimal.Rproposal=minimal.Rproposal,
       initial.Vproposal=initial.Vproposal, minimal.Vproposal.CV=minimal.Vproposal.CV, maximal.Vproposal.corr=maximal.Vproposal.corr,
       proposal.update.rate=proposal.update.rate, delta.ll.cutoff=delta.ll.cutoff, initial.ll.cutoff=initial.ll.cutoff))
 
-  if (keep.uniform)
-    result.data[["uniform"]] <- uniform
+  if (keep.candidates)
+    result.data[["candidates"]] <- candidates
   
   if (keep.initial)
-    result.data[["initial"]] <- cbind(initial.states, initial.meta)
+    result.data[["initial"]] <- cbind(initial, initial.meta)
   
   if (keep.history)
     result.data[["history"]] <- rbindlist(history)
@@ -323,4 +344,171 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains,
   result.data[["final"]] <- cbind(states, states.meta)
 
   return(structure(result.data, class="SANMCMC"))
+}
+
+#' Sample from a multivariate uniform distribution
+#' 
+#' @export
+sample.variables <- function(n, variables) {
+  vs <- names(variables)
+  names(vs) <- names(variables)
+  return(as.data.table(lapply(vs, function(v) {
+    runif(n, min=variables[[v]][1], max=variables[[v]][2])
+  })))
+}
+
+#' Sample from the posterior distribution
+#'
+#' @export
+sample.posterior <- function(n, mcmc, H="auto") {
+  # Estimate bandwidth matrix
+  H <- bandwidth.matrix(mcmc, H)
+  # Sample randomly from the posterior samples
+  k <- nrow(mcmc$final)
+  s <- mcmc$final[sample.int(k, size=n, replace=TRUE), names(mcmc$variables), with=FALSE]
+  # Add displacements samples from a multivariate normal with covariance matrix H
+  # We retry until the displaced value lies within the variable's domain.
+  vs <- names(mcmc$variables)
+  names(vs) <- names(mcmc$variables)
+  r <- list()
+  while(nrow(s) > 0) {
+    # Sample displacements
+    m <- nrow(s)
+    dp <- mvtnorm::rmvnorm(n=m, sigma=H)
+    colnames(dp) <- names(mcmc$variables)
+    # Displace samples, check if result lies within domain otherwise set to NA
+    sp <- as.data.frame(lapply(vs, function(v) {
+      # Fetch variable's domain [lb, ub]
+      lb <- mcmc$variables[[v]][1]
+      ub <- mcmc$variables[[v]][2]
+      x <- s[[v]] + dp[, v]
+      ifelse((lb <= x) & (x <= ub), x, NA_real_)
+    }), optional=TRUE)
+    # Append accepted samples to result r and remove from s
+    a <- !Reduce(`|`, Map(is.na, sp), rep(FALSE, m))
+    r <- c(r, list(sp[a,]))
+    s <- s[!a]
+  }
+  
+  # Merge results from all lopp iterations and return
+  return(rbindlist(r))
+}
+
+#' Find a suitable bandwidth matrix for kernel density estimation 
+#' 
+#' @export
+bandwidth.matrix.default <- function(x, H="auto") {
+  x <- as.matrix(x)
+  d <- ncol(x)
+  H <- if (is.numeric(H)) {
+    # Bandwidth H was specified numerically
+    if (is.vector(H)) {
+      if (length(H) %in% c(1, d)) diag(H, nrow=d, ncol=d)
+      else stop("If H is a numeric vector, it must either specify a single ",
+                "bandwith for all variables, or one bandwith per variable.")
+    } else if (is.matrix(H)) {
+      if ((nrow(H) == d) && (ncol(H) == d)) H
+      else stop("If H is a numeric matrix, if must have as many rows ",
+                "and columns as the posterior has variables")
+    } else stop("If H is numeric, it must either be a vector or a matrix")
+  } else {
+    if (as.character(H) == "auto")
+      H <- if (d <= 6) "Hpi" else "silverman.cov"
+    # Bandwith H must be estimated
+    if (as.character(H) == "silverman.cov") {
+      # Determine bandwith matrix H by scaling the empirical covariance matrix
+      # by a factor R. The choice R=n^(-1/5) is loosely based on the rule-of-thumb
+      # univariate bandwidth estimate H = 0.9 * min(sigma, IQR/1.34) * n^(-1/5).
+      # (https://en.wikipedia.org/wiki/Kernel_density_estimation)
+      # Note: A more precise estimate for the bandwith matrix H would be desirable,
+      # but typical algorithms like the ones implemented in the package ks seems to
+      # fail already for a moderate number of dimensions (say, 6).
+      V <- cov(x)
+      R <- nrow(x)^(-1/5)
+      V * (R^2)
+    } else if (as.character(H) == "Hpi") {
+      ks::Hpi(x, deriv.order=1, nstage=2-(d > 2))
+    } else if (as.character(H) == "Hpi.diag") {
+      ks::Hpi.diag(x, deriv.order=1, nstage=2-(d > 2))
+    } else stop("unknown bandwith estimation method ", as.character(H))
+  }
+  colnames(H) <- colnames(x)
+  rownames(H) <- colnames(x)
+  return(H)
+}
+
+#' Find a suitable bandwith matrix for kernel density estimation and sampling of the posterior
+#' 
+#' @export
+bandwidth.matrix.SANMCMC <- function(sanmcmc, H="auto") {
+  x <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
+  return(bandwidth.matrix(x, H))
+}
+
+#' Locates the posterior distribution's mode(s) using the mean-shift algorithm
+#'
+#' @export
+locate.modes.default <- function(x, tolerance=0.1, adjust=1.0, H="Hpi") {
+  x <- as.matrix(x)
+  H <- bandwidth.matrix(x, H)
+  ks::kms(x, H=H*(adjust^2), min.clust.size=0.1*nrow(x), tol.clust=tolerance)
+}
+
+#' Locates the posterior distribution's mode(s) using the mean-shift algorithm
+#'
+#' @export
+locate.modes.SANMCMC <- function(sanmcmc, tolerance=0.1, adjust=1.0, H="Hpi") {
+  locate.modes(as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE]),
+               tolerance, adjust=adjust, H=H)
+}
+
+#' Computes various summary statistics of the posterior distribution
+#' 
+#' @export
+summarystats.SANMCMC <- function(sanmcmc, modes, expressions=names(sanmcmc$variables)) {
+  stats <- c("mean", "std. dev.", "median", "mad*1.48", "mode", "ML")
+  
+  # Run mean-shift algorithm if necessary and find mode
+  if (missing(modes))
+    modes <- locate.modes(sanmcmc)
+  i.mode <- which.max(modes$nclust.table)
+  mode <- modes$mode[i.mode,]
+  
+  sanmcmc$final[, {
+    stats <- lapply(expressions, function(expr) {
+      # Translate strings into expressions. For added convenience, column
+      # names are quoted automatically, this makes e.g. writing "40S-40A" work.
+      if (is.character(expr)) {
+        expr <- gsub(paste0("(", paste0("(?:", colnames(.SD), ")", collapse="|"), ")"), "`\\1`", expr)
+        expr <- parse(text=expr)
+      }
+      if (!is.expression(expr) && !is.name(expr))
+        stop("invalid expression of type ", class(expr))
+      
+      # Evaluate expression
+      v <- eval(expr)
+      
+      # For MCMC variables, the mode is the multi-variate mode as determined
+      # by the mean-shift algorithm. For other expressions, the mode is determined
+      # using univariate KDE.
+      m <- eval(expr, envir=as.list(mode))
+      if (is.null(m)) {
+        d <- density(v)
+        m <- d$x[which.max(d$y)]
+      }
+      
+      # Compute summary statistics 
+      c(`mean`=mean(v),
+        `std. dev.`=sd(v),
+        `median`=median(v),
+        `mad*1.48`=mad(v),
+        `mode`=m,
+        `ML`=v[which.max(ll)])
+    })
+    
+    # Prepend "stat" column which indicates which row represents
+    # which statistic and name the columns
+    names(stats) <- as.character(expressions)
+    c(list(statistic=names(stats[[1]])), stats)
+  }]
 }
