@@ -23,4 +23,4 @@ lt47.mcmc <- structure(
   class="SANMCMC")
 
 message("*** Saving MCMC results lt47.mcmc to data/lt47.mcmc.RData")
-save(lt47.mcmc, file="data/lt47.mcmc.RData")
+save(lt47.mcmc, file="data/lt47.mcmc.RData", version=2)
