@@ -467,7 +467,7 @@ function(input, output, session) {
         }
         # Compute lambda parameter of a zero-truncated Poisson distribution that
         # yields the requested average number of lineage_aliases per cell
-        a <- a[, list(day, lineage_aliases_lambda=SANjar::tpois.lambda(lineage_aliases)), by=.(lineage_aliases)][, list(
+        a <- a[, list(day, lineage_aliases_lambda=SANjar:::tpois.lambda(lineage_aliases)), by=.(lineage_aliases)][, list(
             lineage_aliases, lineage_aliases_lambda
         ), keyby=day]
         attr(a, "auto") <- auto
