@@ -19,7 +19,8 @@ summarystats <- function(x, ...) UseMethod("summarystats")
 #' Samples from a distribution using the Metropolis-Hastings MCMC algorithm  
 #' 
 #' @export
-mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.samples=chains,
+mcmc <- function(llfun, variables, fixed=character(),
+                 steps=NA, accepts=NA, chains, candidate.samples=chains,
                  candidates=NULL, initial.samplewithreplacement=FALSE, initial=NULL, 
                  keep.history=FALSE, keep.initial=FALSE, keep.candidates=FALSE,
                  reevaluate.likelihood=FALSE, acceptance.target=0.234,
@@ -41,6 +42,8 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
   # Initial state distribution
   if (is.null(initial)) {
     if (is.null(candidates)) {
+      if (length(fixed) > 0)
+        stop("If some variables are held fixed, candidate samples must be provided")
       # Sample parameter space
       if (verbose)
         message("Generating ", candidate.samples, " initial samples")
@@ -106,7 +109,7 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
       # The idea is that this ensures a reasonable dispersion of initial values
       i <- candidates[, sample.int(.N, size=chains, prob=ll.norm.exp, replace=FALSE) ]
     } 
-    initial <- candidates[i, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", varnames), with=FALSE]) ]
+    initial <- candidates[i, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", fixed, varnames), with=FALSE]) ]
     if (!is.null(candidates.meta))
       initial.meta <- candidates.meta[i]
     else
@@ -118,11 +121,11 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
     if (!missing(chains) && (chains != nrow(initial)))
       warning("Number of initial states (", nrow(initial), ") overrides specified number of chains (", chains, ")")
     chains <- nrow(initial)
-    if (ncol(initial) > (length(varnames) + 1))
-      initial.meta <- initial[, .SD, .SDcols=!c("ll", varnames)]
+    if (ncol(initial) > (length(fixed) + length(varnames) + 1))
+      initial.meta <- initial[, .SD, .SDcols=!c("ll", fixed, varnames)]
     else
       initial.meta <- NULL
-    initial <- initial[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", varnames), with=FALSE]) ]
+    initial <- initial[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", fixed, varnames), with=FALSE]) ]
   }
   if (verbose) {
     message("Initial states")
@@ -135,7 +138,7 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
   # the initial covariance estimate using all samples and their likelihoods, since
   # this gives a more precise estimate than using just the initial states.
   Vproposal <- if (is.null(initial.Vproposal)) {
-    if (!is.null(candidates))
+    if (!is.null(candidates[, varnames, with=FALSE]))
       cov.wt(candidates[, varnames, with=FALSE], wt=candidates$ll.norm.exp, method="ML")$cov
     else
       cov(initial[, varnames, with=FALSE])
@@ -236,6 +239,8 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
     displacements <- mvtnorm::rmvnorm(n=sum(extend), sigma=Vproposal) * Rproposal
     colnames(displacements) <- names(varnames)
     proposals <- data.table(valid=extend)
+    if (length(fixed) > 0)
+      proposals[valid==TRUE, (fixed) := states[extend, fixed, with=FALSE] ]
     proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
       states[extend, eval(as.name(v))] + displacements[, v]
     })]
@@ -248,7 +253,8 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
     if (any(proposals$valid)) {
       # Re-evaluate likelihoods of states with valid proposals (if requested)
       if (reevaluate.likelihood) {
-        r <- as.data.table(llfun(states[proposals$valid, varnames, with=FALSE], cutoffs=-Inf))
+        r <- as.data.table(llfun(states[proposals$valid, c(fixed, varnames), with=FALSE],
+                                 cutoffs=-Inf))
         stopifnot(is.finite(unlist(r[, 1])))
         if (!is.null(states.meta) && (ncol(r) > 1))
           states.meta[proposals$valid, colnames(r)[2:ncol(r)] := r[, 2:ncol(r)] ]
@@ -258,7 +264,8 @@ mcmc <- function(llfun, variables, steps=NA, accepts=NA, chains, candidate.sampl
       }
       
       # Evaluate likelihood of valid proposals
-      r <- as.data.table(llfun(proposals[valid==TRUE, varnames, with=FALSE], cutoffs=states[proposals$valid, ll] - delta.ll.cutoff))
+      r <- as.data.table(llfun(proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
+                               cutoffs=states[proposals$valid, ll] - delta.ll.cutoff))
       # Separate meta information
       if (ncol(r) > 1)
         proposals.valid.meta <- r[, 2:ncol(r)]
