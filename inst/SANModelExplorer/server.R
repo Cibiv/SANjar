@@ -211,7 +211,7 @@ function(input, output, session) {
         ), keyby=.(day, sid)]
     })
     dataset_group_ranksize <- reactive({
-        SANjar::rank_size(dataset_group()$lineagesizes[, list(
+        SANjar:::rank_size(dataset_group()$lineagesizes[, list(
             sid, day, size=eval(dataset_lineagesize_expr())
         )])
     })
@@ -526,7 +526,7 @@ function(input, output, session) {
     
     san_stochastic_ranksize <- reactive({
         if (!is.null(san_stochastic_results_reads())) {
-            SANjar::rank_size(san_stochastic_results_reads()[, list(
+            SANjar:::rank_size(san_stochastic_results_reads()[, list(
                 sid, day, size=eval(san_stochastic_results_lineagesize_expr()))])
         } else NULL
     })
@@ -571,7 +571,7 @@ function(input, output, session) {
     })
     san_stochastic_ranksize_with_pcr_filtered <- reactive({
         if (!is.null(san_stochastic_results_with_pcr_filtered())) {
-            SANjar::rank_size(san_stochastic_results_with_pcr_filtered()[, list(
+            SANjar:::rank_size(san_stochastic_results_with_pcr_filtered()[, list(
                 sid, day, size=eval(san_stochastic_results_lineagesize_expr()))])
         } else NULL
     })
