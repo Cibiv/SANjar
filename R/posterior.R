@@ -481,6 +481,9 @@ san_posterior_parallel <- function(posterior, cluster) {
   if (!("SANPosterior" %in% class(posterior)))
     stop("posterior argument must be an instance of SANPosterior (e.g. created with san_posterior())")
 
+  if (is.null(cluster))
+    return(posterior)
+  
   # Setup cluster
   clusterEvalQ(cluster, {
     library(OpenMPController)
