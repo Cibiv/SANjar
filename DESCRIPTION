@@ -12,6 +12,7 @@ Imports:
         methods,
         OpenMPController,
         data.table,
+        Hmisc,
         lamW,
         matrixStats,
         extraDistr,
