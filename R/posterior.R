@@ -424,11 +424,22 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
 #' Combines multiple posteriors by summing up the likelihoods of the components
 #'
 #' @export
-san_posterior_combine <- function(...) {
-  # Get individual posterior objects
-  components <- list(...)
-  if (is.null(names(components)) || any(names(components) == "") || !all(sapply(components, function(p) "SANPosterior" %in% class(p))))
-    stop("arguments of san_posterior_combine() must be named and must be instances of SANPosterior (e.g. created with san_posterior())")
+san_posterior_combine <- function(..., components=list(), parametrization=NULL) {
+  # Handle components of combined posterior distribution
+  components <- c(list(...), components)
+  if ((length(components) > 1) && (is.null(names(components)) || any(names(components) == "")))
+    stop("san_posterior_combine expects datasets and posterior distribution arguments to be named")
+  if (is.null(parametrization)) {
+    # Expect posterior distribution arguments
+    if (!all(sapply(components, function(p) "SANPosterior" %in% class(p))))
+      stop("if no parametrization is specified, san_posterior_combine() expects instances of SANPosterior (e.g. created with san_posterior())")
+  } else {
+    # Expect datasets distribution arguments
+    if (!all(sapply(components, function(p) "LTData" %in% class(p))))
+      stop("if a parametrization is specified, san_posterior_combine() expects instances of LTData (such as lt74)")
+    # Construct posterior distribution objects from datasets
+    components <- lapply(components, function(lt) san_posterior(parametrization, lt))
+  }
 
   # Check that the parameters are the same
   parameters <- NULL
