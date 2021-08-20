@@ -1,0 +1,9 @@
+Hmisc:
+------
+Hmisc is listet as a dependency because ggplot2's mean_sdl depends on it, yet
+its not listed as a dependency of ggplot2. If mean_sdl() is called and Hmisc
+is not available, mean_sdl() will attempt to *install* Hmisc. If no CRAN mirror
+was selected previously, this will prompt the user to select on, and block the
+process until the user responds. If that happends from the SAN model explorer
+shiny app, the app appears to be frozen until the user realizes that the line
+"Selection:" that appears on the R console demands that a mirror be selected.
