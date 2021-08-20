@@ -46,7 +46,7 @@ mcmc <- function(llfun, variables, fixed=character(),
         stop("If some variables are held fixed, candidate samples must be provided")
       # Sample parameter space
       if (verbose)
-        message("Generating ", candidate.samples, " initial samples")
+        message("Generating ", candidate.samples, " candidate samples")
       candidates <- sample.variables(candidate.samples, variables)
     }
     # Determine initial.ll.cutoff
@@ -142,8 +142,7 @@ mcmc <- function(llfun, variables, fixed=character(),
       cov.wt(candidates[, varnames, with=FALSE], wt=candidates$ll.norm.exp, method="ML")$cov
     else
       cov(initial[, varnames, with=FALSE])
-  } else
-    initial.Vproposal
+  } else initial.Vproposal
   Rproposal <- initial.Rproposal
   if (verbose) {
     message("Initial proposal distribution")
