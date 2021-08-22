@@ -416,8 +416,8 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     parameters=parametrization$ranges,
     auxiliary=list(ll=c("ll_cc", names(res_ll_rs)), cc=names(res_cc), sc=names(res_sc), rs=names(res_rs)),
     data=list(cc=logcis.cc, rs=logcis.rs, unit=lt$unit),
-    arguments=list(c.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
-                   min.size=0.1, min.logsd=0.1)
+    arguments=list(cc.cutoff=cc.cutoff, p.cutoff=p.cutoff, ll.site.min=ll.site.min,
+                   min.size=min.size, min.logsd=min.logsd)
   ), class="SANPosterior"))
 }
 
