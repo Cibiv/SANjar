@@ -63,9 +63,9 @@ plot.SANPosterior <- function(posterior, data, ll=NULL, plotlist=FALSE, ...) {
 
   # Plot total organoid sizes
   p.cc <- ggplot2::ggplot() +
-    ggplot2::geom_errorbar(data=posterior$data$cc, ggplot2::aes(x=day, ymin=10^(logmean-logsd), ymax=10^(logmean+logsd))) +
     ggplot2::geom_line(data=ll.cc, ggplot2::aes(x=day, y=pmax(value, posterior$arguments$min.size),
                                                 color=!!llfield.cc, group=index_ll)) +
+    ggplot2::geom_errorbar(data=posterior$data$cc, ggplot2::aes(x=day, ymin=10^(logmean-logsd), ymax=10^(logmean+logsd))) +
     make_scale_log10(ggplot2::scale_y_log10) +
     ggplot2::scale_color_gradient2(name=expression(log~L), trans=log_ll,
                                    low="red", mid="green", midpoint=midpoint(ll.cc[, eval(llfield.cc)]), high="blue") +
@@ -94,10 +94,10 @@ plot.SANPosterior <- function(posterior, data, ll=NULL, plotlist=FALSE, ...) {
 
     # Plot
     ggplot2::ggplot() +
-      ggplot2::geom_errorbar(data=posterior$data$rs[day==rs_day],
-                             ggplot2::aes(x=rank, ymin=10^(logmean-logsd), ymax=10^(logmean+logsd))) +
       ggplot2::geom_line(data=ll.rs, ggplot2::aes(x=rank, y=pmax(value, posterior$arguments$min.size),
                                                   color=!!llfield.rs, group=index_ll)) +
+      ggplot2::geom_errorbar(data=posterior$data$rs[day==rs_day],
+                             ggplot2::aes(x=rank, ymin=10^(logmean-logsd), ymax=10^(logmean+logsd))) +
       ggplot2::annotate("text", x=Inf, y=Inf, hjust=1, vjust=1, col="black", label=paste0("day ", rs_day)) +
       make_scale_log10(ggplot2::scale_x_log10) +
       make_scale_log10(ggplot2::scale_y_log10) +
