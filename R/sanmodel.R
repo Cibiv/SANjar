@@ -1,7 +1,12 @@
+#' Create a SANModel
+#' 
+#' @export
+san_model <- function(x, ...) UseMethod("san_model")
+
 #' Create a SANModel from a rates table and an initial number of cells
 #'
 #' @export
-san_model <- function(rates, s0) {
+san_model.default <- function(rates, s0) {
   if (!is.numeric(s0) || (length(s0) != 1) || !is.finite(s0) || (s0 %% 1 != 0) || (s0 < 0))
     stop("s0 must be a single finite and non-negative integer")
   
@@ -11,8 +16,8 @@ san_model <- function(rates, s0) {
   if (!all(SAN.RATENAMES %in% colnames(rates)))
     stop("rates ", paste0(SAN.RATENAMES[!(SAN.RATENAMES %in% colname(rates))], collapse=", "), " are missing")
   for (c in SAN.RATENAMES) {
-    if (!is.numeric(rates[[c]]) || any(is.infinite(rates[[c]])) || !all(is.na(rates[[c]]) || (rates[[c]] >= 0)))
-      stop(paste(n, " must contain non-negative and finite numeric values or NA"))
+    if (!is.numeric(rates[[c]]) || any(is.infinite(rates[[c]])) || any(rates[[c]] < 0))
+      stop(paste(c, " must contain non-negative and finite numeric values or NA"))
   }
   if (!is.numeric(rates$Tmax) || !all(is.finite(rates$Tmax)) || is.unsorted(rates$Tmax))
     stop(paste("Tmax must contain non-negative and finite numeric values, and must increase monotonically"))

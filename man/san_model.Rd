@@ -2,10 +2,10 @@
 % Please edit documentation in R/sanmodel.R
 \name{san_model}
 \alias{san_model}
-\title{Create a SANModel from a rates table and an initial number of cells}
+\title{Create a SANModel}
 \usage{
-san_model(rates, s0)
+san_model(x, ...)
 }
 \description{
-Create a SANModel from a rates table and an initial number of cells
+Create a SANModel
 }

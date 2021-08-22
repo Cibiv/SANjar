@@ -68,7 +68,7 @@ rateslist_s0 <- function(parameterization, params) UseMethod("rateslist_s0")
 #' @export
 autodetect.metaparameters <- function(parameterization, ...) UseMethod("autodetect.metaparameters")
 
-#' Convert a parameter vector to a model instance
+#' Convert a parameter vector to a rate list and initial cell count (s0)
 #' 
 #' @export
 rateslist_s0.SANParametrization <- function(parameterization, params) {
@@ -85,6 +85,41 @@ rateslist_s0.SANParametrization <- function(parameterization, params) {
     s0 <- params["s0"]
   
   return(list(s0=s0, rateslist=rl))
+}
+
+#' Convert a parameter vector to a SAN model instance
+#' 
+#' @export
+san_model.SANParametrization <- function(parameterization, params, lt=NULL) {
+  # If a dataset was provided, use it to fill in missing meta-parameters
+  if (!is.null(lt))
+    parameterization <- autodetect.metaparameters(parameterization, lt)
+  
+  # Extract the parameters from the parameter vector or single-row table
+  if (is.data.table(params)) {
+    if (nrow(params) != 1)
+      stop("cannot create a SAN model instance from multiple parameter combinations")
+    params <- unlist(params[, parameterization$names, with=FALSE])
+  } else if (is.data.frame(params)) {
+    if (nrow(params) != 1)
+      stop("cannot create a SAN model instance from multiple parameter combinations")
+    params <- unlist(params[, parameterization$names])
+  } else if (is.vector(param,s)) {
+    params <- params[parameterization$names]
+  } 
+    
+  # Convert parameter vector to ratelist and s0, and determine a sensible Tmax
+  # (The original Tmax of the basemodel that the parametrizations was created with
+  # is lost by san_parametrization)
+  rl_s0 <- rateslist_s0(parameterization, params)
+  rl_s0$rateslist[[length(rl_s0$rateslist)]]$Tmax <- max(
+    parameterization$cc_days,
+    parameterization$rs_days,
+    parameterization$sc_days
+  )
+  
+  # Return SANModel instance
+  return(san_model(rbindlist(rl_s0$rateslist), rl_s0$s0))
 }
 
 #' Adapt a SAN model parametrization (SANP instance) to a specific dataset

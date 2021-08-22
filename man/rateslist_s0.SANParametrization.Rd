@@ -2,10 +2,10 @@
 % Please edit documentation in R/posterior.R
 \name{rateslist_s0.SANParametrization}
 \alias{rateslist_s0.SANParametrization}
-\title{Convert a parameter vector to a model instance}
+\title{Convert a parameter vector to a rate list and initial cell count (s0)}
 \usage{
 \method{rateslist_s0}{SANParametrization}(parameterization, params)
 }
 \description{
-Convert a parameter vector to a model instance
+Convert a parameter vector to a rate list and initial cell count (s0)
 }
