@@ -12,15 +12,19 @@ san_model_explorer <- function(..., location.parametersets=".") {
   app_env <- new.env()
   
   app_env$LOCATION.PARAMETERSETS <- location.parametersets
-  app_env$DEFAULT.PARAMETERSET <- lt47.model
 
-  ds_expr <- substitute(list(...))
-  ds <- list(...)
-  ds_labs <- names(ds)
-  ds_lab <- if (is.null(ds_labs)) rep(FALSE, length(ds)) else (ds_labs != "")
-  names(ds)[!ds_lab] <- as.character(ds_expr[2:length(ds_expr)])[!ds_lab]
-  app_env$DATASETS <- ds
-
+  ps_expr <- substitute(list(...))
+  ps <- list(...)
+  ps_labs <- names(ps)
+  ps_lab <- if (is.null(ps_labs)) rep(FALSE, length(ps)) else (ps_labs != "")
+  names(ps)[!ps_lab] <- as.character(ps_expr[2:length(ps_expr)])[!ps_lab]
+  app_env$DATASETS <- Filter(function(p) class(p)=="LTData", ps)
+  app_env$MODELS <- Filter(function(p) class(p)=="SANModel", ps)
+  if (length(app_env$MODELS) == 0)
+    app_env$MODELS <- list(lt47.model)
+  app_env$DEFAULT.PARAMETERSET <- app_env$MODELS[[1]]
+  
+  
   app_globalR <- file.path(app_dir, "global.R")
   if (file.exists(app_globalR))
     local(source(app_globalR, local=TRUE, echo=FALSE, keep.source=TRUE), envir=app_env)
