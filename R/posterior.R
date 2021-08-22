@@ -424,7 +424,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
 #' Combines multiple posteriors by summing up the likelihoods of the components
 #'
 #' @export
-san_posterior_combine <- function(..., components=list(), parametrization=NULL) {
+san_posterior_combine <- function(..., components=list(), parametrization=NULL, args=list()) {
   # Handle components of combined posterior distribution
   components <- c(list(...), components)
   if ((length(components) > 1) && (is.null(names(components)) || any(names(components) == "")))
@@ -438,7 +438,7 @@ san_posterior_combine <- function(..., components=list(), parametrization=NULL) 
     if (!all(sapply(components, function(p) "LTData" %in% class(p))))
       stop("if a parametrization is specified, san_posterior_combine() expects instances of LTData (such as lt74)")
     # Construct posterior distribution objects from datasets
-    components <- lapply(components, function(lt) san_posterior(parametrization, lt))
+    components <- lapply(components, function(lt) do.call(san_posterior, c(list(parametrization, lt), args)))
   }
 
   # Check that the parameters are the same
