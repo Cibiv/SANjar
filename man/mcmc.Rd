@@ -7,6 +7,7 @@
 mcmc(
   llfun,
   variables,
+  fixed = character(),
   steps = NA,
   accepts = NA,
   chains,

@@ -4,7 +4,7 @@
 \alias{plot.SANPosterior}
 \title{Plot log-normal confidence intervals defining the posterior overlayed with model predictions}
 \usage{
-\method{plot}{SANPosterior}(posterior, data, params = NULL, ll = NULL, plotlist = FALSE, ...)
+\method{plot}{SANPosterior}(posterior, data, ll = NULL, plotlist = FALSE, ...)
 }
 \description{
 Plot log-normal confidence intervals defining the posterior overlayed with model predictions

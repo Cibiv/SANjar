@@ -4,7 +4,12 @@
 \alias{san_posterior_combine}
 \title{Combines multiple posteriors by summing up the likelihoods of the components}
 \usage{
-san_posterior_combine(...)
+san_posterior_combine(
+  ...,
+  components = list(),
+  parametrization = NULL,
+  args = list()
+)
 }
 \description{
 Combines multiple posteriors by summing up the likelihoods of the components
