@@ -23,8 +23,8 @@ mcmc <- function(llfun, variables, fixed=character(),
                  steps=NA, accepts=NA, chains, candidate.samples=chains,
                  candidates=NULL, initial.samplewithreplacement=FALSE, initial=NULL, 
                  keep.history=FALSE, keep.initial=FALSE, keep.candidates=FALSE,
-                 reevaluate.likelihood=FALSE, acceptance.target=0.234,
-                 initial.Rproposal=1.0, minimal.Rproposal=0.2,
+                 acceptance.target=if ((length(variables) == 1) || directional.metropolis.gibbs) 0.44 else 0.234,
+                 directional.metropolis.gibbs=FALSE, initial.Rproposal=1.0, minimal.Rproposal=0.2,
                  initial.Vproposal=NULL, minimal.Vproposal.CV=0.1, maximal.Vproposal.corr=0.95,
                  proposal.update.rate=0.2, delta.ll.cutoff=15, initial.ll.cutoff=NA,
                  verbose=FALSE)
@@ -143,14 +143,20 @@ mcmc <- function(llfun, variables, fixed=character(),
     else
       cov(initial[, varnames, with=FALSE])
   } else initial.Vproposal
-  Rproposal <- initial.Rproposal
+  # For Metropolis-within-Gibbs, we scale each component separately, but
+  # for multivariate normal proposals, there is only a single scaling factor
+  Rproposal <- if (directional.metropolis.gibbs)
+    sapply(varnames, function(v) initial.Rproposal)
+  else
+    initial.Rproposal
   if (verbose) {
     message("Initial proposal distribution")
     message("  covariance matrix V:")
     message(paste0("    ", capture.output(print(signif(Vproposal, 3))), collapse="\n"))
     if (!is.null(acceptance.target))
-      message("  radius R: ", signif(Rproposal, 3))
+      message("  radius R: ", paste(signif(Rproposal, 3), collapse=" "))
   }
+  Vproposal.directions <- NULL
   
   # Setup MCMC variables
   states <- initial
@@ -158,7 +164,44 @@ mcmc <- function(llfun, variables, fixed=character(),
   if (keep.history) {
     history <- list(states[, c(list(step=0), .SD) ])
   }
-
+  
+  # Proposal generator for multivariate normal proposals
+  fill.proposals.mvnorm <- function(proposals) {
+    # Generate proposals by sampling displacements using current covariances and radius,
+    # and displacing the previous samples accordingly. We only really generate proposals
+    # for chains that need extension.
+    displacements <- mvtnorm::rmvnorm(n=sum(proposals$valid), sigma=Vproposal) * Rproposal
+    colnames(displacements) <- names(varnames)
+    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
+      states[proposals$valid, eval(as.name(v))] + displacements[, v]
+    })]
+  }
+  
+  # Proposal generator for Metropolis-within-Gibbs sampling
+  fill.proposals.gibbs <- function(proposals, direction.index) {
+    if (direction.index == 1) {
+      # Re-compute the factorization of the covariance matrix before starting a new iteration
+      ev <- eigen(Vproposal, symmetric=TRUE)
+      Vpd <- t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
+      colnames(Vpd) <- varnames
+      Vproposal.directions <<- asplit(Vpd, MARGIN=1)
+    }
+    
+    # Compute displacements along the direction.index-ith direction
+    displacements <- (matrix(rnorm(sum(proposals$valid)), ncol=1)
+                      %*% (Vproposal.directions[[direction.index]]
+                           * Rproposal[direction.index]))
+    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
+      states[proposals$valid, eval(as.name(v))] + displacements[, v]
+    })]
+  }
+  
+  # Likelihood evaluation
+  evaluate.loglikelihoods <- function(proposals) {
+    as.data.table(llfun(proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
+                        cutoffs=states[proposals$valid, ll] - delta.ll.cutoff))
+  }
+  
   # Prevent the variances of the proposal distribution from becoming too small
   Vproposal.clamp <- function() {
     # Compute vector of adjustment factors which make the i-th CV equal to minimal.Vproposal.CV
@@ -215,11 +258,16 @@ mcmc <- function(llfun, variables, fixed=character(),
     }
   }
   Vproposal.clamp()
-
+  
   # Run k Metropolis-Hasting MCMC steps
   step <- 0
   while(  ( is.na(steps) || (step < steps) ) && ( is.na(accepts) || (sum(states$naccepts < accepts) > 0) )  ) {
     step <- step + 1
+    
+    # If we're doing metropolis-within-gibbs, we iterate through the possible directions individually
+    direction <- if (directional.metropolis.gibbs)
+      direction <- 1 + (step - 1) %% length(variables)
+    else 1
 
     # Copy states, since data.table does not copy on update
     states <- copy(states)
@@ -230,39 +278,25 @@ mcmc <- function(llfun, variables, fixed=character(),
     else
       rep(TRUE, nrow(states))
 
-    # Generate proposals by sampling displacements using current covariances and radius,
-    # and displacing the previous samples accordingly. We only really generate proposals
-    # for chains that need extension.
-    displacements <- mvtnorm::rmvnorm(n=sum(extend), sigma=Vproposal) * Rproposal
-    colnames(displacements) <- names(varnames)
+    # Setup proposals table, and fill in fixed variables
     proposals <- data.table(valid=extend)
     if (length(fixed) > 0)
       proposals[valid==TRUE, (fixed) := states[extend, fixed, with=FALSE] ]
-    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
-      states[extend, eval(as.name(v))] + displacements[, v]
-    })]
-
+    
+    # Generate proposals
+    if (directional.metropolis.gibbs)
+      fill.proposals.gibbs(proposals, direction)
+    else
+      fill.proposals.mvnorm(proposals)
+    
     # Accept or reject proposals
     # Proposals outside the parameter's domain are skipped.
     accept <- rep(FALSE, nrow(states))
     for(v in varnames)
       proposals[valid==TRUE, valid := valid & (variables[[v]][1] <= eval(as.name(v))) & (eval(as.name(v)) <= variables[[v]][2]) ]
     if (any(proposals$valid)) {
-      # Re-evaluate likelihoods of states with valid proposals (if requested)
-      if (reevaluate.likelihood) {
-        r <- as.data.table(llfun(states[proposals$valid, c(fixed, varnames), with=FALSE],
-                                 cutoffs=-Inf))
-        stopifnot(is.finite(unlist(r[, 1])))
-        if (!is.null(states.meta) && (ncol(r) > 1))
-          states.meta[proposals$valid, colnames(r)[2:ncol(r)] := r[, 2:ncol(r)] ]
-        else
-          states.meta <- NULL
-        states[proposals$valid, ll := r[, 1] ]
-      }
-      
       # Evaluate likelihood of valid proposals
-      r <- as.data.table(llfun(proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
-                               cutoffs=states[proposals$valid, ll] - delta.ll.cutoff))
+      r <- evaluate.loglikelihoods(proposals)
       # Separate meta information
       if (ncol(r) > 1)
         proposals.valid.meta <- r[, 2:ncol(r)]
@@ -289,7 +323,7 @@ mcmc <- function(llfun, variables, fixed=character(),
     }
 
     if (verbose) {
-      message("States after step ", step)
+      message("States after step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
       states.signif <- states[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
       message(paste0("  ", capture.output(print(states.signif)), collapse="\n"))
       message("Chain extension attempts: ", sum(extend))
@@ -306,17 +340,24 @@ mcmc <- function(llfun, variables, fixed=character(),
     
     # Update the proposal radius to meet the acceptance target, smoothly over about proposal.update.rate steps.
     # Widening the proposal radius reduces the acceptance rate, we thus adjust the radius based on the ratio
-    # of actual vs. targetted acceptance rate. To avoid the radius becoming zero (where it would then remain)
-    # updates are limited to at most a factor of two, regardless of the update rate.
-    if (!is.null(acceptance.target) && (proposal.update.rate > 0))
-      Rproposal <- max(Rproposal * max(0.5, min((mean(accept[extend]) / acceptance.target)^proposal.update.rate, 2)), minimal.Rproposal)
+    # of actual vs. targeted acceptance rate. To avoid the radius becoming zero (where it would then remain)
+    # updates are limited to at most a factor of two, regardless of the update rate. To avoid large fluctuations
+    # the update factor is dampened according to proposal.update.rate, and according to how many chains we
+    # attempted to extend.
+    if (!is.null(acceptance.target) && (proposal.update.rate > 0)) {
+      f.raw <- mean(accept[extend]) / acceptance.target
+      gamma <- 0.1
+      r <- proposal.update.rate * gamma * sum(extend) / (1 + gamma * sum(extend))
+      f <- max(0.5, min(f.raw ^ r, 2))
+      Rproposal[direction] <- max(minimal.Rproposal, Rproposal[direction] * f)
+    }
     
     if (verbose && proposal.update.rate) {
       message("Updated proposal distribution after step ", step)
       message("  covariance matrix V:")
       message(paste0("    ", capture.output(print(signif(Vproposal, 3))), collapse="\n"))
       if (!is.null(acceptance.target))
-        message("  radius R: ", signif(Rproposal, 3))
+        message("  radius R: ", paste(signif(Rproposal, 3), collapse=" "))
     }
     
     # Store samples
@@ -331,7 +372,7 @@ mcmc <- function(llfun, variables, fixed=character(),
     arguments=list(
       steps=steps, accepts=accepts, chains=chains, candidate.samples=chains,
       initial.samplewithreplacement=initial.samplewithreplacement,
-      reevaluate.likelihood=reevaluate.likelihood, acceptance.target=acceptance.target,
+      acceptance.target=acceptance.target, directional.metropolis.gibbs=directional.metropolis.gibbs,
       initial.Rproposal=initial.Rproposal, minimal.Rproposal=minimal.Rproposal,
       initial.Vproposal=initial.Vproposal, minimal.Vproposal.CV=minimal.Vproposal.CV, maximal.Vproposal.corr=maximal.Vproposal.corr,
       proposal.update.rate=proposal.update.rate, delta.ll.cutoff=delta.ll.cutoff, initial.ll.cutoff=initial.ll.cutoff))
