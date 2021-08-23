@@ -495,8 +495,14 @@ san_posterior_combine <- function(..., components=list(), parametrization=NULL, 
   loglikelihood <- function(params, cutoffs=-Inf) {
     stopifnot(is.parameter.vector(params) || is.parameter.matrix(params))
     stopifnot((length(cutoffs) == 1) || (is.parameter.matrix(params) && (length(cutoffs) == nrow(params))))
+    if (is.parameter.matrix(params) && (length(cutoffs) == 1))
+      cutoffs <- rep(cutoffs, nrow(params))
     # Evaluate individual posterior likelihoods
-    lls <- lapply(loglikelihoods, function(ll) ll(params, cutoffs) )
+    lls <- lapply(loglikelihoods, function(ll) {
+      r <- ll(params, cutoffs)
+      cutoffs <<- cutoffs - r$ll_tot
+      r
+    })
     # Compute total likelihood
     ll_tot <- Reduce(function(ll_tot, ll) ll_tot + ll$ll_tot, lls, 0)
     # Return either list or table containing the total likelihood and all auxiliary data
