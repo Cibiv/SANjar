@@ -44,7 +44,10 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     if (llfun.average > 1) {
       # Evaluate likelihoods multiple times for each proposal
       i <- rep(1:nrow(parameters), each=llfun.average)
-      rbindlist(lapply(split(as.data.table(llfun(parameters[i,], cutoffs=cutoffs[i])), i), function(g) {
+      parameters <- parameters[i,]
+      if (length(cutoffs) > 1)
+        cutoffs = rep(cutoffs, each=llfun.average)[i]
+      rbindlist(lapply(split(as.data.table(llfun(parameters, cutoffs=cutoffs)), i), function(g) {
         # Average likelihoods (NOT log-likelihoods!) across proposals
         # Since we can't easily average the meta-information, we take the one
         # that corresponds to the highest likelihood.
