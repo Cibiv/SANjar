@@ -154,7 +154,7 @@ autodetect.metaparameters.SANParametrization <- function(parameterization, lt) {
 #' 
 #' @export
 san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.site.min=-Inf,
-                         min.size=0.1, min.logsd=0.1)
+                         min.size=0.1, min.logsd=0.1, seqsim.coarse=FALSE)
 {
   # Fill in dataset-dependent parameters
   parametrization <- autodetect.metaparameters(parametrization, lt)
@@ -269,6 +269,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
   env$rs_pcreff <- rs_pcreff
   env$rs_th <- rs_th
   env$rs_aliaslambda <- rs_aliaslambda
+  env$method_seqsim <- if (seqsim.coarse) "gamma" else NULL
 
   # Compute cellcounts
   cellcounts <- function(s0, rl) {
@@ -308,7 +309,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
       ls
     # Simulate sequencing using gwpcR
     ls.reads <- seqsim(ls.labs, reads.target=ceiling(as.numeric(rs_libsize[[param_i]])),
-                       efficiency=rs_pcreff[[param_i]])
+                       efficiency=rs_pcreff[[param_i]], method=method_seqsim)
     # Apply threshold, set read count to zero for filtered lineages
     ls.reads[ls.reads < rs_th[[param_i]]] <- 0
     if (unit == "cells") {
@@ -452,7 +453,7 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     auxiliary=list(ll=c("ll_cc", names(res_ll_rs)), cc=names(res_cc), sc=names(res_sc), rs=names(res_rs)),
     data=list(cc=logcis.cc, rs=logcis.rs, unit=lt$unit),
     arguments=list(cc.cutoff=cc.cutoff, p.cutoff=p.cutoff, ll.site.min=ll.site.min,
-                   min.size=min.size, min.logsd=min.logsd)
+                   min.size=min.size, min.logsd=min.logsd, seqsim.coarse=seqsim.coarse)
   ), class="SANPosterior"))
 }
 
