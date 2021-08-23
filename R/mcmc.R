@@ -19,7 +19,7 @@ summarystats <- function(x, ...) UseMethod("summarystats")
 #' Samples from a distribution using the Metropolis-Hastings MCMC algorithm  
 #' 
 #' @export
-mcmc <- function(llfun, variables, fixed=character(),
+mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
                  steps=NA, accepts=NA, chains, candidate.samples=chains,
                  candidates=NULL, initial.samplewithreplacement=FALSE, initial=NULL, 
                  keep.history=FALSE, keep.initial=FALSE, keep.candidates=FALSE,
@@ -38,6 +38,26 @@ mcmc <- function(llfun, variables, fixed=character(),
   # Prepare a list of variable names, ensuring that lapply(varnames) will return a *named* list
   varnames <- names(variables)
   names(varnames) <- varnames
+  
+  # Average likelihoods if requested
+  average.likelihoods <- function(parameters, cutoffs) {
+    if (llfun.average > 1) {
+      # Evaluate likelihoods multiple times for each proposal
+      i <- rep(1:nrow(parameters), each=llfun.average)
+      rbindlist(lapply(split(as.data.table(llfun(parameters[i,], cutoffs=cutoffs[i])), i), function(g) {
+        # Average likelihoods (NOT log-likelihoods!) across proposals
+        # Since we can't easily average the meta-information, we take the one
+        # that corresponds to the highest likelihood.
+        ll <- g[, 1][[1]]
+        j.max <- which.max(ll)
+        ll.max <- ll[j.max]
+        ll.avg <- log(mean(exp(ll - ll.max))) + ll.max
+        cbind(ll.avg, g[j.max, -1])
+      }))
+    } else {
+      as.data.table(llfun(parameters, cutoffs=cutoffs))
+    }
+  }
   
   # Initial state distribution
   if (is.null(initial)) {
@@ -127,6 +147,12 @@ mcmc <- function(llfun, variables, fixed=character(),
       initial.meta <- NULL
     initial <- initial[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", fixed, varnames), with=FALSE]) ]
   }
+  if (llfun.average > 1) {
+    message("Will average the likelihood over ", llfun.average, " evaluations, re-evaluating initial likelihoods now")
+    # Evaluate likelihood of valid proposals
+    r <- average.likelihoods(initial[, c(fixed, varnames), with=FALSE], cutoffs=-Inf)
+    initial[, ll := r[, 1]]
+  }
   if (verbose) {
     message("Initial states")
     initial.signif <- initial[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
@@ -198,8 +224,8 @@ mcmc <- function(llfun, variables, fixed=character(),
   
   # Likelihood evaluation
   evaluate.loglikelihoods <- function(proposals) {
-    as.data.table(llfun(proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
-                        cutoffs=states[proposals$valid, ll] - delta.ll.cutoff))
+    average.likelihoods(parameters=proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
+                        cutoffs=states[proposals$valid, ll] - delta.ll.cutoff)
   }
   
   # Prevent the variances of the proposal distribution from becoming too small
@@ -370,7 +396,7 @@ mcmc <- function(llfun, variables, fixed=character(),
     variables=variables,
     llfun=llfun,
     arguments=list(
-      steps=steps, accepts=accepts, chains=chains, candidate.samples=chains,
+      llfun.average=llfun.average, steps=steps, accepts=accepts, chains=chains, candidate.samples=chains,
       initial.samplewithreplacement=initial.samplewithreplacement,
       acceptance.target=acceptance.target, directional.metropolis.gibbs=directional.metropolis.gibbs,
       initial.Rproposal=initial.Rproposal, minimal.Rproposal=minimal.Rproposal,
