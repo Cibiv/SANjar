@@ -180,8 +180,6 @@ mcmc <- function(llfun, variables, fixed=character(),
       # Then set any zeros in the diagonal of V to the desired minimal variance
       adj.inf <- !is.finite(adj)
       diag(Vproposal)[adj.inf] <<- overshoot*sd.min[adj.inf]^2
-      # And force the radius to one, otherwise the actual proposal radius may still be tiny
-      Rproposal <<- 1
     }
 
     # Restrict correlations to at most maximal.Vproposal.corr
