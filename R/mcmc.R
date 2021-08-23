@@ -54,7 +54,7 @@ mcmc <- function(llfun, variables, fixed=character(),
       candidates.cutoffest <- candidates[1:ceiling(sqrt(.N))]
       if (verbose)
         message("Evaluating posterior likelihood for ", nrow(candidates.cutoffest), " candidate samples to estimate initial.ll.cutoff")
-      r <- llfun(candidates.cutoffest, cutoffs=-Inf)
+      r <- as.data.table(llfun(candidates.cutoffest, cutoffs=-Inf))
       initial.ll.cutoff <- max(r[, 1])
     }
     # Evaluate likelihood
