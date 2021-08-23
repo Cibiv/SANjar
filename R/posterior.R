@@ -500,7 +500,7 @@ san_posterior_combine <- function(..., components=list(), parametrization=NULL, 
     # Evaluate individual posterior likelihoods
     lls <- lapply(loglikelihoods, function(ll) {
       r <- ll(params, cutoffs)
-      cutoffs <<- cutoffs - r$ll_tot
+      cutoffs <<- ifelse(is.finite(r$ll_tot), cutoffs - r$ll_tot, Inf)
       r
     })
     # Compute total likelihood
