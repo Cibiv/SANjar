@@ -61,6 +61,82 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       as.data.table(llfun(parameters, cutoffs=cutoffs))
     }
   }
+
+  # Proposal generator for multivariate normal proposals
+  fill.proposals.mvnorm <- function(proposals, states) {
+    # Generate proposals by sampling displacements using current covariances and radius,
+    # and displacing the previous samples accordingly. We only really generate proposals
+    # for chains that need extension.
+    displacements <- mvtnorm::rmvnorm(n=sum(proposals$valid), sigma=Vproposal) * Rproposal
+    colnames(displacements) <- names(varnames)
+    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
+      states[proposals$valid, eval(as.name(v))] + displacements[, v]
+    })]
+  }
+  
+  # Proposal generator for Metropolis-within-Gibbs sampling
+  fill.proposals.gibbs <- function(proposals, direction.index, states) {
+    if (direction.index == 1) {
+      # Re-compute the factorization of the covariance matrix before starting a new iteration
+      ev <- eigen(Vproposal, symmetric=TRUE)
+      Vpd <- t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
+      colnames(Vpd) <- varnames
+      Vproposal.directions <<- asplit(Vpd, MARGIN=1)
+    }
+    
+    # Compute displacements along the direction.index-ith direction
+    displacements <- (matrix(rnorm(sum(proposals$valid)), ncol=1)
+                      %*% (Vproposal.directions[[direction.index]]
+                           * Rproposal[direction.index]))
+    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
+      states[proposals$valid, eval(as.name(v))] + displacements[, v]
+    })]
+  }
+
+  # Split table returned by the llfun into the likelihood column and the meta-data table
+  split.llfun.out <- function(llfun.out) {
+    ll <- llfun.out[[ colnames(llfun.out)[1] ]]
+    if (ncol(llfun.out) > 1)
+      meta <- llfun.out[, 2:ncol(llfun.out)]
+    else
+      meta <- NULL
+    return(list(ll=ll, meta=meta))
+  }
+  
+  # Likelihood evaluation
+  evaluate.loglikelihoods <- function(proposals, states) {
+    split.llfun.out(average.likelihoods(parameters=proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
+                                        cutoffs=states[proposals$valid, ll] - delta.ll.cutoff))
+  }
+  
+  # Perform MH step
+  metropolis.hastings <- function(proposals, results, states, states.meta, varnames) {
+    # Check that we got the correct number of results
+    stopifnot(nrow(proposals) == nrow(states))
+    stopifnot(is.null(states.meta) || (nrow(states) == nrow(states.meta)))
+    stopifnot(nrow(results) == sum(proposals$valid))
+    
+    # Set proposal likelihoods
+    proposals[, ll := -Inf]
+    proposals[valid==TRUE, ll := results$ll ]
+    
+    # Accept or reject proposals using the Metropolis-Hastings rule
+    accept <- rep(FALSE, nrow(states))
+    mh <- (proposals$valid & is.finite(proposals$ll))
+    accept[mh] <- (runif(sum(mh)) <= exp(proposals$ll[mh] - states$ll[mh]))
+    # Update parameters if a proposal was accepted
+    states[accept, c("ll", varnames) := proposals[accept, c("ll", varnames), with=FALSE] ]
+    states[accept, naccepts := naccepts + 1]
+    # Replace meta information if a proposal was accepted
+    if (!is.null(states.meta) && !is.null(results$meta)) {
+      stopifnot(!accept[!proposals$valid])
+      states.meta[accept, colnames(results$meta) := results$meta[accept[proposals$valid]] ]
+    }
+    else
+      states.meta <- NULL
+    
+    return(accept)
+  }
   
   # Initial state distribution
   if (is.null(initial)) {
@@ -194,43 +270,6 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     history <- list(states[, c(list(step=0), .SD) ])
   }
   
-  # Proposal generator for multivariate normal proposals
-  fill.proposals.mvnorm <- function(proposals) {
-    # Generate proposals by sampling displacements using current covariances and radius,
-    # and displacing the previous samples accordingly. We only really generate proposals
-    # for chains that need extension.
-    displacements <- mvtnorm::rmvnorm(n=sum(proposals$valid), sigma=Vproposal) * Rproposal
-    colnames(displacements) <- names(varnames)
-    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
-      states[proposals$valid, eval(as.name(v))] + displacements[, v]
-    })]
-  }
-  
-  # Proposal generator for Metropolis-within-Gibbs sampling
-  fill.proposals.gibbs <- function(proposals, direction.index) {
-    if (direction.index == 1) {
-      # Re-compute the factorization of the covariance matrix before starting a new iteration
-      ev <- eigen(Vproposal, symmetric=TRUE)
-      Vpd <- t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
-      colnames(Vpd) <- varnames
-      Vproposal.directions <<- asplit(Vpd, MARGIN=1)
-    }
-    
-    # Compute displacements along the direction.index-ith direction
-    displacements <- (matrix(rnorm(sum(proposals$valid)), ncol=1)
-                      %*% (Vproposal.directions[[direction.index]]
-                           * Rproposal[direction.index]))
-    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
-      states[proposals$valid, eval(as.name(v))] + displacements[, v]
-    })]
-  }
-  
-  # Likelihood evaluation
-  evaluate.loglikelihoods <- function(proposals) {
-    average.likelihoods(parameters=proposals[valid==TRUE, c(fixed, varnames), with=FALSE],
-                        cutoffs=states[proposals$valid, ll] - delta.ll.cutoff)
-  }
-  
   # Prevent the variances of the proposal distribution from becoming too small
   Vproposal.clamp <- function() {
     # Compute vector of adjustment factors which make the i-th CV equal to minimal.Vproposal.CV
@@ -308,15 +347,15 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       rep(TRUE, nrow(states))
 
     # Setup proposals table, and fill in fixed variables
-    proposals <- data.table(valid=extend)
+    proposals <- data.table(valid=extend, ll=-Inf)
     if (length(fixed) > 0)
       proposals[valid==TRUE, (fixed) := states[extend, fixed, with=FALSE] ]
     
     # Generate proposals
     if (directional.metropolis.gibbs)
-      fill.proposals.gibbs(proposals, direction)
+      fill.proposals.gibbs(proposals, direction, states)
     else
-      fill.proposals.mvnorm(proposals)
+      fill.proposals.mvnorm(proposals, states)
     
     # Accept or reject proposals
     # Proposals outside the parameter's domain are skipped.
@@ -325,31 +364,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       proposals[valid==TRUE, valid := valid & (variables[[v]][1] <= eval(as.name(v))) & (eval(as.name(v)) <= variables[[v]][2]) ]
     if (any(proposals$valid)) {
       # Evaluate likelihood of valid proposals
-      r <- evaluate.loglikelihoods(proposals)
-      # Separate meta information
-      if (ncol(r) > 1)
-        proposals.valid.meta <- r[, 2:ncol(r)]
-      else
-        proposals.valid.meta <- NULL
-      # Set proposal likelihoods
-      proposals[, ll := -Inf]
-      proposals[valid==TRUE, ll := r[, 1]]
-      proposals[, ll.finite := is.finite(ll) ]
-      
-      # Accept or reject proposals using the Metropolis-Hastings rule
-      mh <- (proposals$valid & proposals$ll.finite)
-      accept[mh] <- (runif(sum(mh)) <= exp(proposals$ll[mh] - states$ll[mh]))
-      # Update parameters if a proposal was accepted
-      states[accept, c("ll", varnames) := proposals[accept, c("ll", varnames), with=FALSE] ]
-      states[accept, naccepts := naccepts + 1]
-      # Replace meta information if a proposal was accepted
-      if (!is.null(states.meta) && !is.null(proposals.valid.meta)) {
-        stopifnot(!accept[!proposals$valid])
-        states.meta[accept, colnames(proposals.valid.meta) :=
-                      proposals.valid.meta[accept[proposals$valid]] ]
-      }
-      else
-        states.meta <- NULL
+      results <- evaluate.loglikelihoods(proposals, states)
+      # Perform MH updates
+      accept <- metropolis.hastings(proposals, results, states, states.meta, varnames)
     }
 
     if (verbose) {
@@ -361,8 +378,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
         message("Completed step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
       message("Chain extension attempts: ", sum(extend))
       message("Valid proposal ratio over extension attempts: ", signif(proposals[extend, mean(valid)], 3))
-      message("Finite-LL proposal ratio over extension attempts: ", signif(proposals[extend, mean(ll.finite)], 3))
+      message("Finite-LL proposal ratio over extension attempts: ", signif(proposals[extend, mean(is.finite(ll))], 3))
       message("Acceptance ratio over extension attempts: ", signif(mean(accept[extend]), 3))
+      message("Accepted proposals in each chain: min=", min(states$naccepts), " median=", median(states$naccepts), " max=", max(states$naccepts))
       message("Average log-likelihood over all chains: ", signif(states[, mean(ll)], 3))
     }
 
