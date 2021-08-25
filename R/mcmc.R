@@ -27,7 +27,7 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
                  directional.metropolis.gibbs=FALSE, initial.Rproposal=1.0, minimal.Rproposal=0.2,
                  initial.Vproposal=NULL, minimal.Vproposal.CV=0.1, maximal.Vproposal.corr=0.95,
                  proposal.update.rate=0.2, delta.ll.cutoff=15, initial.ll.cutoff=NA,
-                 verbose=FALSE)
+                 verbose=FALSE, extremely.verbose=FALSE)
 {
   # Negative values would reject any proposal that doesn't *decrease* the likelihood sufficiently
   stopifnot(delta.ll.cutoff >= 0)
@@ -352,9 +352,12 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     }
 
     if (verbose) {
-      message("States after step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
-      states.signif <- states[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
-      message(paste0("  ", capture.output(print(states.signif)), collapse="\n"))
+      if (extremely.verbose) {
+        message("States after step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
+        states.signif <- states[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
+        message(paste0("  ", capture.output(print(states.signif)), collapse="\n"))
+      } else
+        message("Completed step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
       message("Chain extension attempts: ", sum(extend))
       message("Valid proposal ratio over extension attempts: ", signif(proposals[extend, mean(valid)], 3))
       message("Acceptance ratio over extension attempts: ", signif(mean(accept[extend]), 3))
