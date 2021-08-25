@@ -147,72 +147,37 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       if (verbose)
         message("Generating ", candidate.samples, " candidate samples")
       candidates <- sample.variables(candidate.samples, variables)
-    }
-    # Determine initial.ll.cutoff
-    if (is.na(initial.ll.cutoff)) {
-      candidates.cutoffest <- candidates[1:ceiling(sqrt(.N))]
-      if (verbose)
-        message("Evaluating posterior likelihood for ", nrow(candidates.cutoffest), " candidate samples to estimate initial.ll.cutoff")
-      r <- as.data.table(llfun(candidates.cutoffest, cutoffs=-Inf))
-      initial.ll.cutoff <- max(r[, 1])
-    }
-    # Evaluate likelihood
-    if (verbose)
-      message("Evaluating posterior likelihood for ", nrow(candidates), " candidate samples ",
-              "with initial.ll.cutoff ", signif(initial.ll.cutoff, 3))
-    r <- as.data.table(llfun(candidates, cutoffs=initial.ll.cutoff))
-    r.ll <- r[[ colnames(r)[1] ]]
-    if (ncol(r) > 1)
-      candidates.meta <- r[, 2:ncol(r)]
-    else
-      candidates.meta <- NULL
-    # Remove samples with log-likelihood -infinity
-    r.ll.finite <- is.finite(r.ll)
-    candidates <- candidates[r.ll.finite]
-    candidates[, ll := r.ll[r.ll.finite] ]
-    if (!is.null(candidates.meta))
-      candidates.meta <- candidates.meta[r.ll.finite]
-    if (nrow(candidates) == 0)
-      stop("No candidate sample had finite likelihood, aborting")
-    # Remove samples whose log-likelihood is too small to yield a positive probability when
-    # exponentiated Since the latter could, in principle, affect *all* likelihoods,
-    # log-likelihoods are normalized to make the largest log-likelihood 1 before exponentiation.
-    # Since likelihoods are only defined up to a constant scaling factor, this additional#
-    # scaling does not affect the results.
-    ll.max <- candidates[, max(ll)]
-    candidates[, ll.norm.exp :=  exp(ll-ll.max) ]
-    ll.norm.exp.positive <- candidates[, (ll.norm.exp > 0)]
-    candidates <- candidates[ll.norm.exp.positive]
-    if (!is.null(candidates.meta))
-      candidates.meta <- candidates.meta[ll.norm.exp.positive]
-    if (verbose) {
-      message("The following ", nrow(candidates), " candidate samples are usable:")
-      message(paste0("  ", capture.output(print(signif(candidates, 3))), collapse="\n"))
-    }
-    # Sample initial states accordingly to likelihood from the uniformly spaced samples
-    if (initial.samplewithreplacement) {
-      # Sample the initial states
-      if (verbose)
-        message("Sampling initial states for ", chains, " chains from ", nrow(candidates), " candidates with replacement")
-      i <- candidates[, sample.int(.N, size=chains, prob=ll.norm.exp, replace=TRUE) ]
-    } else {
-      # Repeat existing sample often enough to not run out of samples when sampling the initial states
-      k <- ceiling(chains / nrow(candidates))
-      if (verbose)
-        message("Sampling initial states for ", chains, " chains from ", nrow(candidates), " candidates, ",
-                "using each candidate at most ", k, " times")
-      candidates <- rbindlist(rep(list(candidates), k))
-      if (!is.null(candidates.meta))
-        candidates.meta <- rbindlist(rep(list(candidates.meta), k))
-      # Sample the initial states *without* replacement
-      # The idea is that this ensures a reasonable dispersion of initial values
-      i <- candidates[, sample.int(.N, size=chains, prob=ll.norm.exp, replace=FALSE) ]
     } 
-    initial <- candidates[i, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", fixed, varnames), with=FALSE]) ]
-    if (!is.null(candidates.meta))
-      initial.meta <- candidates.meta[i]
-    else
-      initial.meta <- NULL
+    # Run MCMC with independent proposals to initialize the chains
+    initial <- data.table(chain=1:chains, naccepts=0, ll=-Inf)
+    initial[, c(fixed, varnames) := rep(list(NA_real_), length(fixed) + length(varnames)) ]
+    initial.meta <- NULL
+    i <- 1
+    while (i + chains - 1 <= nrow(candidates)) {
+      # Fetch next <chains> proposals from the candidates table
+      proposals <- data.table(valid=rep(TRUE, chains), ll=-Inf)
+      proposals[, c(fixed, varnames) := candidates[i:(i+chains-1), c(fixed, varnames), with=FALSE] ]
+      # Evaluate proposal likelihoods
+      results <- evaluate.loglikelihoods(proposals, initial)
+      if ((i == 1) && !is.null(results$meta))
+        initial.meta <- results$meta
+      # Perform MH step
+      accept <- metropolis.hastings(proposals, results, initial, initial.meta, c(fixed, varnames))
+      # Log
+      if (extremely.verbose) {
+        message("States after initialization step ", 1 + (i-1)/chains)
+        initial.signif <- initial[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
+        message(paste0("  ", capture.output(print(initial.signif)), collapse="\n"))
+      } else
+        message("Completed initialization step ", 1 + (i-1)/chains)
+      message("Valid proposal ratios: ", signif(proposals[, mean(valid)], 3))
+      message("Finite-LL proposal ratios: ", signif(proposals[, mean(is.finite(ll))], 3))
+      message("Acceptance ratio: ", signif(mean(accept), 3))
+      message("Accepted proposals in each chain: min=", min(initial$naccepts), " median=", median(initial$naccepts), " max=", max(initial$naccepts))
+      message("Average log-likelihood over all chains: ", signif(initial[, mean(ll)], 3))
+      # Continue until condidates are exhausted
+      i <- i + chains
+    }
   } else {
     # Initial states were specified
     if (!is.null(candidates))
@@ -242,12 +207,10 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
   # If we started with ABC-style uniform sampling of the parameter space, we compute
   # the initial covariance estimate using all samples and their likelihoods, since
   # this gives a more precise estimate than using just the initial states.
-  Vproposal <- if (is.null(initial.Vproposal)) {
-    if (!is.null(candidates[, varnames, with=FALSE]))
-      cov.wt(candidates[, varnames, with=FALSE], wt=candidates$ll.norm.exp, method="ML")$cov
-    else
-      cov(initial[, varnames, with=FALSE])
-  } else initial.Vproposal
+  Vproposal <- if (is.null(initial.Vproposal))
+    cov(initial[, varnames, with=FALSE])
+  else
+    initial.Vproposal
   # For Metropolis-within-Gibbs, we scale each component separately, but
   # for multivariate normal proposals, there is only a single scaling factor
   Rproposal <- if (directional.metropolis.gibbs)
@@ -264,7 +227,8 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
   Vproposal.directions <- NULL
   
   # Setup MCMC variables
-  states <- initial
+  states <- copy(initial)
+  states[, naccepts := 0]
   states.meta <- initial.meta
   if (keep.history) {
     history <- list(states[, c(list(step=0), .SD) ])
