@@ -148,6 +148,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
         message("Generating ", candidate.samples, " candidate samples")
       candidates <- sample.variables(candidate.samples, variables)
     } 
+    # Check that we have enough candidates
+    if (nrow(candidates) < chains)
+      stop("need at least as many candidate samples as there are chains, ideally much more")
     # Run MCMC with independent proposals to initialize the chains
     initial <- data.table(chain=1:chains, naccepts=0, ll=-Inf)
     initial[, c(fixed, varnames) := rep(list(NA_real_), length(fixed) + length(varnames)) ]
