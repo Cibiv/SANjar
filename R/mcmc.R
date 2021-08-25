@@ -334,9 +334,10 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       # Set proposal likelihoods
       proposals[, ll := -Inf]
       proposals[valid==TRUE, ll := r[, 1]]
+      proposals[, ll.finite := is.finite(ll) ]
       
       # Accept or reject proposals using the Metropolis-Hastings rule
-      mh <- (proposals$valid & is.finite(proposals$ll))
+      mh <- (proposals$valid & proposals$ll.finite)
       accept[mh] <- (runif(sum(mh)) <= exp(proposals$ll[mh] - states$ll[mh]))
       # Update parameters if a proposal was accepted
       states[accept, c("ll", varnames) := proposals[accept, c("ll", varnames), with=FALSE] ]
@@ -360,6 +361,7 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
         message("Completed step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
       message("Chain extension attempts: ", sum(extend))
       message("Valid proposal ratio over extension attempts: ", signif(proposals[extend, mean(valid)], 3))
+      message("Finite-LL proposal ratio over extension attempts: ", signif(proposals[extend, mean(ll.finite)], 3))
       message("Acceptance ratio over extension attempts: ", signif(mean(accept[extend]), 3))
       message("Average log-likelihood over all chains: ", signif(states[, mean(ll)], 3))
     }
