@@ -594,10 +594,19 @@ function(input, output, session) {
         }
         # Load file
         message("Loading parameter set ", input$loadfrom, " from ", parameterset.fullpath(input$loadfrom))
-        parameterset.loaded(local({
-            load(file=parameterset.fullpath(input$loadfrom))
-            c(SAN.PARAMS, list(name=input$loadfrom))
-        }))
+        psenv <- new.env(parent=emptyenv())
+        load(file=parameterset.fullpath(input$loadfrom), envir=psenv)
+        print(ls(psenv))
+        ps <- if (exists("SAN.PARAMS", envir=psenv))
+            get("SAN.PARAMS", envir=psenv)
+        else if (length(ls(psenv)) == 1)
+            get(ls(psenv)[1], envir=psenv)
+        else
+            NULL
+        if (!is.null(ps))
+            parameterset.loaded(c(ps, list(name=input$loadfrom)))
+        else
+            message(parameterset.fullpath(input$loadfrom), " must either contain a single element, or an element named SAN.PARAMS")
     })
     observeEvent(parameterset.loaded(), {
         ps <- parameterset.loaded()
