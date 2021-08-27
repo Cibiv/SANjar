@@ -8,6 +8,7 @@ mcmc(
   llfun,
   variables,
   fixed = character(),
+  llfun.average = 1,
   steps = NA,
   accepts = NA,
   chains,
@@ -18,8 +19,9 @@ mcmc(
   keep.history = FALSE,
   keep.initial = FALSE,
   keep.candidates = FALSE,
-  reevaluate.likelihood = FALSE,
-  acceptance.target = 0.234,
+  acceptance.target = if ((length(variables) == 1) || directional.metropolis.gibbs)
+    0.44 else 0.234,
+  directional.metropolis.gibbs = FALSE,
   initial.Rproposal = 1,
   minimal.Rproposal = 0.2,
   initial.Vproposal = NULL,
@@ -28,7 +30,8 @@ mcmc(
   proposal.update.rate = 0.2,
   delta.ll.cutoff = 15,
   initial.ll.cutoff = NA,
-  verbose = FALSE
+  verbose = FALSE,
+  extremely.verbose = FALSE
 )
 }
 \description{
