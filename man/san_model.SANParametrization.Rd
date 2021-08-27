@@ -4,7 +4,7 @@
 \alias{san_model.SANParametrization}
 \title{Convert a parameter vector to a SAN model instance}
 \usage{
-\method{san_model}{SANParametrization}(parameterization, params)
+\method{san_model}{SANParametrization}(parameterization, params, lt = NULL, s0 = NA, Tmax = NA)
 }
 \description{
 Convert a parameter vector to a SAN model instance

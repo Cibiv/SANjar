@@ -90,7 +90,7 @@ rateslist_s0.SANParametrization <- function(parameterization, params) {
 #' Convert a parameter vector to a SAN model instance
 #' 
 #' @export
-san_model.SANParametrization <- function(parameterization, params, lt=NULL) {
+san_model.SANParametrization <- function(parameterization, params, lt=NULL, s0=NA, Tmax=NA) {
   # If a dataset was provided, use it to fill in missing meta-parameters
   if (!is.null(lt))
     parameterization <- autodetect.metaparameters(parameterization, lt)
@@ -104,22 +104,27 @@ san_model.SANParametrization <- function(parameterization, params, lt=NULL) {
     if (nrow(params) != 1)
       stop("cannot create a SAN model instance from multiple parameter combinations")
     params <- unlist(params[, parameterization$names])
-  } else if (is.vector(param,s)) {
+  } else if (is.vector(params)) {
     params <- params[parameterization$names]
   } 
     
-  # Convert parameter vector to ratelist and s0, and determine a sensible Tmax
+  # Convert parameter vector to ratelist, and set s0 unless it was overriden manually
+  rl_s0 <- rateslist_s0(parameterization, params)
+  if (is.na(s0))
+    s0 <- rl_s0$s0
+  # Determine a sensible Tmax unless one was provided
   # (The original Tmax of the basemodel that the parametrizations was created with
   # is lost by san_parametrization)
-  rl_s0 <- rateslist_s0(parameterization, params)
-  rl_s0$rateslist[[length(rl_s0$rateslist)]]$Tmax <- max(
+  rl_s0$rateslist[[length(rl_s0$rateslist)]]$Tmax <- if (!is.na(Tmax))
+    Tmax
+  else max(
     parameterization$cc_days,
     parameterization$rs_days,
     parameterization$sc_days
   )
   
   # Return SANModel instance
-  return(san_model(rbindlist(rl_s0$rateslist), rl_s0$s0))
+  return(san_model(rbindlist(rl_s0$rateslist), s0))
 }
 
 #' Adapt a SAN model parametrization (SANP instance) to a specific dataset
