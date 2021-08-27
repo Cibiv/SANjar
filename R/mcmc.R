@@ -181,6 +181,20 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       # Continue until condidates are exhausted
       i <- i + chains
     }
+    if (all(is.infinite(initial$ll)))
+      stop("Unable to find initial parameters with finite likelihood, aborting")
+    if (any(is.infinite(initial$ll))) {
+      message("Some chains have likelihood -inf after initialization, re-sampling their parameters from other chains")
+      # Select replacement parameters from the initial parameters with finite likelihood
+      ll.inf <- is.infinite(initial$ll)
+      ll.fin.idx <- (1:nrow(initial))[!ll.inf]
+      ll.inf.repidx <- ll.fin.idx[sample.int(length(ll.fin.idx), size=sum(ll.inf), replace=TRUE)]
+      # Replace parameters
+      initial[ll.inf, c("ll", varnames) := initial[ll.inf.repidx, c("ll", varnames), with=FALSE] ]
+      # Replace meta information
+      if (!is.null(initial.meta))
+        initial.meta[ll.inf, colnames(initial.meta) := initial.meta[ll.inf.repidx] ]
+    }
   } else {
     # Initial states were specified
     if (!is.null(candidates))
