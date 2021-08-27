@@ -11,6 +11,11 @@ bandwidth.matrix <- function(x, ...) UseMethod("bandwidth.matrix")
 #' @export
 locate.modes <- function(x, ...) UseMethod("locate.modes")
 
+#' Computes the MAP (maximum a-posteriori) estimate from MCMC results
+#' 
+#' @export
+map.estimate <- function(x, ...) UseMethod("map.estimate")
+
 #' Computes various summary statistics
 #' 
 #' @export
@@ -540,6 +545,17 @@ locate.modes.default <- function(x, tolerance=0.1, adjust=1.0, H="Hpi") {
 locate.modes.SANMCMC <- function(sanmcmc, tolerance=0.1, adjust=1.0, H="Hpi") {
   locate.modes(as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE]),
                tolerance, adjust=adjust, H=H)
+}
+
+#' Computes the MAP (maximum a-posteriori) estimate from MCMC results
+#' 
+#' @export
+map.estimate.SANMCMC <- function(sanmcmc, modes, H="Hpi") {
+  # Run mean-shift algorithm if necessary and find mode
+  if (missing(modes))
+    modes <- locate.modes(sanmcmc, H=H)
+  i.mode <- which.max(modes$nclust.table)
+  return(modes$mode[i.mode,])
 }
 
 #' Computes various summary statistics of the posterior distribution
