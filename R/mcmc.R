@@ -202,8 +202,10 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     if (!missing(chains) && (chains != nrow(initial)))
       warning("Number of initial states (", nrow(initial), ") overrides specified number of chains (", chains, ")")
     chains <- nrow(initial)
-    if (ncol(initial) > (length(fixed) + length(varnames) + 1))
-      initial.meta <- initial[, .SD, .SDcols=!c("ll", fixed, varnames)]
+    # Split off meta-data columns, which are the columns after the last variable (or fixed parameter)
+    ci.lastvar <- max((1:ncol(initial))[colnames(initial) %in% c(fixed, varnames)])
+    if (ncol(initial) > ci.lastvar)
+      initial.meta <- initial[, -(1:ci.lastvar)]
     else
       initial.meta <- NULL
     initial <- initial[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", fixed, varnames), with=FALSE]) ]
