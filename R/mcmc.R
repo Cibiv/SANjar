@@ -84,9 +84,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     if (direction.index == 1) {
       # Re-compute the factorization of the covariance matrix before starting a new iteration
       ev <- eigen(Vproposal, symmetric=TRUE)
-      Vpd <- t(ev$vectors %*% (t(ev$vectors) * sqrt(pmax(ev$values, 0))))
-      colnames(Vpd) <- varnames
-      Vproposal.directions <<- asplit(Vpd, MARGIN=1)
+      A <- t(ev$vectors) * sqrt(pmax(ev$values, 0))
+      colnames(A) <- varnames
+      Vproposal.directions <<- asplit(A, MARGIN=1)
     }
     
     # Compute displacements along the direction.index-ith direction
