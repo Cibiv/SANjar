@@ -373,7 +373,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     }
 
     # Update the proposal distribution, smoothly over about proposal.update.rate steps.
-    if (proposal.update.rate > 0) {
+    Vproposal.update <- ((proposal.update.rate > 0) &&
+                         (!directional.metropolis.gibbs || (direction == length(variables))))
+    if (Vproposal.update) {
       Vproposal <- Vproposal * (1 - proposal.update.rate) + cov(states[, varnames, with=FALSE]) * proposal.update.rate
       Vproposal.clamp()
     }
@@ -392,7 +394,7 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       Rproposal[direction] <- max(minimal.Rproposal, Rproposal[direction] * f)
     }
     
-    if (verbose && proposal.update.rate) {
+    if (verbose && Vproposal.update) {
       message("Updated proposal distribution after step ", step)
       message("  covariance matrix V:")
       message(paste0("    ", capture.output(print(signif(Vproposal, 3))), collapse="\n"))
