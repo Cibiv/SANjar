@@ -87,6 +87,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       A <- t(ev$vectors) * sqrt(pmax(ev$values, 0))
       colnames(A) <- varnames
       Vproposal.directions <<- asplit(A, MARGIN=1)
+      message("Updated Gibbs sampling directions:")
+      message(paste0("  ", capture.output(print(signif(do.call(rbind, Vproposal.directions), 3))),
+                     collapse="\n"))
     }
     
     # Compute displacements along the direction.index-ith direction
