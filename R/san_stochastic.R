@@ -131,7 +131,7 @@ san_stochastic <- function(L=NA, s0=1, rates, previous=NULL, Tmax=max(rates$Tmax
   rates <- as.data.table(rates)
   for (c in SAN.RATENAMES)
     if (!is.numeric(rates[[c]]) || !all(is.finite(rates[[c]])) || any(rates[[c]] < 0))
-      stop(paste(n, " must contain non-negative and finite numeric values"))
+      stop(paste(c, " must contain non-negative and finite numeric values"))
   if (is.unsorted(rates$Tmax))
     stop(paste("Tmax must contain non-negative and finite numeric values, and must increase monotonically"))
   if (Tmax > max(rates$Tmax))
