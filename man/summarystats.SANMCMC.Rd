@@ -4,7 +4,7 @@
 \alias{summarystats.SANMCMC}
 \title{Computes various summary statistics of the posterior distribution}
 \usage{
-\method{summarystats}{SANMCMC}(sanmcmc, modes, expressions = names(sanmcmc$variables))
+\method{summarystats}{SANMCMC}(sanmcmc, map, expressions = names(sanmcmc$variables))
 }
 \description{
 Computes various summary statistics of the posterior distribution

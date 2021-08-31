@@ -6,11 +6,6 @@
 #' @export
 bandwidth.matrix <- function(x, ...) UseMethod("bandwidth.matrix")
 
-#' Locates the distribution's mode(s) using the mean-shift algorithm
-#'
-#' @export
-locate.modes <- function(x, ...) UseMethod("locate.modes")
-
 #' Computes the MAP (maximum a-posteriori) estimate from MCMC results
 #' 
 #' @export
@@ -535,46 +530,69 @@ bandwidth.matrix.SANMCMC <- function(sanmcmc, H="auto") {
   return(bandwidth.matrix(x, H))
 }
 
-#' Locates the posterior distribution's mode(s) using the mean-shift algorithm
-#'
-#' @export
-locate.modes.default <- function(x, tolerance=0.1, adjust=1.0, H="Hpi") {
-  x <- as.matrix(x)
-  H <- bandwidth.matrix(x, H)
-  ks::kms(x, H=H*(adjust^2), min.clust.size=0.1*nrow(x), tol.clust=tolerance)
-}
-
-#' Locates the posterior distribution's mode(s) using the mean-shift algorithm
-#'
-#' @export
-locate.modes.SANMCMC <- function(sanmcmc, tolerance=0.1, adjust=1.0, H="Hpi") {
-  locate.modes(as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE]),
-               tolerance, adjust=adjust, H=H)
-}
-
 #' Computes the MAP (maximum a-posteriori) estimate from MCMC results
 #' 
 #' @export
-map.estimate.SANMCMC <- function(sanmcmc, modes, H="Hpi") {
-  # Run mean-shift algorithm if necessary and find mode
-  if (missing(modes))
-    modes <- locate.modes(sanmcmc, H=H)
-  i.mode <- which.max(modes$nclust.table)
-  return(modes$mode[i.mode,])
+map.estimate.SANMCMC <- function(sanmcmc, ms.tolerance=0.1, H.adjust=1.0, H="Hpi", method="max.local.lh.avg", ms=NULL) {
+  # Get posterior samples as a matrix with one column per variable, one row per sample 
+  final.ll <- sanmcmc$final[, ll]
+  final <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
+  # Run mean-shift algorithm unless mean-shift results are provided (see meanshift()).
+  # This algorithm finds a set of modes (i.e. local density maxima), and assigns each
+  # sample to one of these modes. The mean-shift algorithm thus is not only a mode-finding
+  # algorithm, but also an (unsupervised) clustering algorithm.
+  if (is.null(ms)) {
+    x <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
+    H <- bandwidth.matrix(x, H)
+    ms <- ks::kms(x, H=H*(H.adjust^2), min.clust.size=0.1*nrow(x), tol.clust=ms.tolerance)
+  }
+  # Pick the "maximal" mode
+  # Which mode constitutes the "maximum" depends on the metric used to compare the modes
+  method <- match.arg(method, c("max.local.lh.avg", "max.cluster.lh.sum", "largest.cluster"))
+  i.mode <- if (method == "max.local.lh.avg") {
+    # Metric is the average likelihoods of the MCMC samples in the neighbourhood of each node.
+    # The neighborhoods are defined by the bandwidth matrix;  each sample's LH is weighted
+    # by its contribution to the density at the mode. The idea behind this approach is that
+    # it should be robust against partially converged MCMC runs. If some MCMC chains got stuck
+    # in local optima and hence have low likelihoods, this approach should not pick these
+    # clusters.
+    H <- bandwidth.matrix(sanmcmc, H=H)
+    ll.scale <- max(final.ll)
+    modes.ll <- sapply(1:ms$nclust, function(i) {
+      w <- mvtnorm::dmvnorm(final, mean=ms$mode[i,], sigma=H*(H.adjust^2))
+      log(weighted.mean(exp(final.ll - ll.scale), w=w)) + ll.scale
+    })
+    which.max(modes.ll)
+  } else if (method == "max.cluster.lh.sum") {
+    # Metric is the sum of likelihoods within each cluster. This is a version of "largest.cluster"
+    # this is (somehwat) robust against partially converged MCMC runs because the influence of
+    # low-likelihood samples is reduced. However, larger sub-optimal clusters may still dominate
+    # over smaller clusters containing better likelihoods.
+    ll.scale <- max(final.ll)
+    modes.ll <- sapply(1:ms$nclust, function(i) {
+      log(sum(exp(final.ll[ms$label==i] - ll.scale))) + ll.scale
+    })
+    print(modes.ll)
+    which.max(modes.ll)
+  } else if (method == "largest.cluster") {
+    # Metric is simply the cluster size. This is robust against noisy likelihood evaluations,
+    # but not robust against partially converged MCMC results because low-likelihood samples can
+    # dominate the mode selection
+    which.max(ms$nclust.table)
+  }
+  return(ms$mode[i.mode,])
 }
 
 #' Computes various summary statistics of the posterior distribution
 #' 
 #' @export
-summarystats.SANMCMC <- function(sanmcmc, modes, expressions=names(sanmcmc$variables)) {
-  stats <- c("mean", "std. dev.", "median", "mad*1.48", "mode", "ML")
+summarystats.SANMCMC <- function(sanmcmc, map, expressions=names(sanmcmc$variables)) {
+  stats <- c("mean", "std. dev.", "median", "mad*1.48", "MAP", "ML")
   
   # Run mean-shift algorithm if necessary and find mode
-  if (missing(modes))
-    modes <- locate.modes(sanmcmc)
-  i.mode <- which.max(modes$nclust.table)
-  mode <- modes$mode[i.mode,]
-  
+  if (missing(map))
+    map <- map.estimate(sanmcmc)
+
   sanmcmc$final[, {
     stats <- lapply(expressions, function(expr) {
       # Translate strings into expressions. For added convenience, column
@@ -589,21 +607,23 @@ summarystats.SANMCMC <- function(sanmcmc, modes, expressions=names(sanmcmc$varia
       # Evaluate expression
       v <- eval(expr)
       
-      # For MCMC variables, the mode is the multi-variate mode as determined
-      # by the mean-shift algorithm. For other expressions, the mode is determined
-      # using univariate KDE.
-      m <- eval(expr, envir=as.list(mode))
-      if (is.null(m)) {
+      # For MCMC variables, the MAP (maximum á posteriori) is the maximal multi-variate mode
+      # For other expressions, the mode is determined using univariate KDE.
+      m <- if (is.name(expr[[1]]) && (length(x) == 1)) {
+        # Expression is a single variable name, use multi-variate MAP estimates computed above
+        eval(expr, envir=as.list(map))
+      } else {
+        # Expression is a complex expression, compute univariate mode
         d <- density(v)
-        m <- d$x[which.max(d$y)]
+        d$x[which.max(d$y)]
       }
-      
+
       # Compute summary statistics 
       c(`mean`=mean(v),
         `std. dev.`=sd(v),
         `median`=median(v),
         `mad*1.48`=mad(v),
-        `mode`=m,
+        `MAP`=m,
         `ML`=v[which.max(ll)])
     })
     
