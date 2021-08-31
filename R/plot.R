@@ -14,7 +14,9 @@ plot.data <- function(posterior, data, include=character()) {
       # Collect parameter columns and re-simulate model
       posterior$loglikelihood(data[, pars, with=FALSE])
     else
-      stop("data must contains either all parameters or all auxiliary data columns from the posterior")
+      stop("data must contains either all parameters or all auxiliary data columns from the posterior ",
+           "for of the former is missing ", paste0(setdiff(pars, colnames(data)), sep=", "), " and of ",
+           "the latter is missing ", paste0(setdiff(c("ll_tot", aux), colnames(data))))
   } else {
     # Make sure that x has two dimensions,
     data <- rbind(data)
