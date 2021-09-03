@@ -1,6 +1,7 @@
 plot.data <- function(posterior, data, include=character()) {
   pars <- names(posterior$parameters)
-  aux <-  c(include, posterior$auxiliary$ll, posterior$auxiliary$cc, posterior$auxiliary$sc, posterior$auxiliary$rs)
+  aux <-  c(posterior$auxiliary$ll, posterior$auxiliary$cc, posterior$auxiliary$sc, posterior$auxiliary$rs)
+  include <- setdiff(include, aux)
   if ("SANMCMC" %in% class(data)) {
     # Collect auxiliary data columns
     d <- data$final[, c("ll", aux), with=FALSE]
@@ -9,7 +10,7 @@ plot.data <- function(posterior, data, include=character()) {
   } else if ("data.table" %in% class(data)) {
     if (all(c("ll_tot", aux) %in% colnames(data)))
       # Collect auxiliary data columns
-      data[, c("ll_tot", aux), with=FALSE]
+      data[, c("ll_tot", aux, include), with=FALSE]
     else if (all(pars %in% colnames(data)))
       # Collect parameter columns and re-simulate model
       posterior$loglikelihood(data[, pars, with=FALSE])
@@ -22,7 +23,7 @@ plot.data <- function(posterior, data, include=character()) {
     data <- rbind(data)
     if (all(c("ll_tot", aux) %in% colnames(data)))
       # Collect auxiliary data columns
-      data[, c("ll_tot", aux)]
+      data[, c("ll_tot", aux, include)]
     else if (all(pars %in% colnames(data)))
       # Collect parameter columns and re-simulate model
       posterior$loglikelihood(data[, pars])
@@ -34,7 +35,12 @@ plot.data <- function(posterior, data, include=character()) {
 #' Plot log-normal confidence intervals defining the posterior overlayed with model predictions
 #'
 #' @export
-plot.SANPosterior <- function(posterior, data, ll=NULL, plotlist=FALSE, ...) {
+plot.SANPosterior <- function(posterior, data, ll="ll_tot", plotlist=FALSE, rs_days, ...) {
+  # For combined posterior, the leading dot indicates the field within each component is
+  # to be used to color trajectories. Since there are no further nesting levels, simply
+  # strip any leadind dot left in place
+  if (startsWith(ll, "."))
+    ll <- substring(ll, 2, strlen(ll))
   # Convert input data (MCMC results, parameter vector or result of posterior$loglikelihood) into usable form
   data <- as.data.table(plot.data(posterior, data, include=as.character(ll)))
   data[, index := 1:.N ]
@@ -74,7 +80,8 @@ plot.SANPosterior <- function(posterior, data, ll=NULL, plotlist=FALSE, ...) {
     ggplot2::labs(y="cells")
   
   # Plot rank-sizes
-  rs_days <- posterior$parametrization$rs_days
+  if (is.null(rs_days))
+    rs_days <- posterior$parametrization$rs_days
   if (length(rs_days) > 0)
     names(rs_days) <- paste0("day", rs_days)
   p.rs <- lapply(rs_days, function(rs_day) {
@@ -110,37 +117,51 @@ plot.SANPosterior <- function(posterior, data, ll=NULL, plotlist=FALSE, ...) {
   
   # Either return a list of plots, or arrange them in a grid with ggarrange
   p <- c(list(cc=p.cc), p.rs)
-  if (!plotlist)
-    return(ggpubr::ggarrange(plotlist=p, align="hv", ...))
-  else
+  if (!plotlist) {
+    args <- list(align="hv", common.legend=(!is.null(ll) && (ll=="ll")))
+    args <- modifyList(args, list(...))
+    return(do.call(ggpubr::ggarrange, c(list(plotlist=p), args)))
+  } else
     return(p)
 }
 
 #' Combine the plots from all components of a combined posterior distribution
 #' 
 #' @export
-plot.SANCombinedPosterior <-  function(posterior, data, ll=NULL, plotlist=FALSE, ...) {
+plot.SANCombinedPosterior <-  function(posterior, data, ll=".ll_tot", plotlist=FALSE, rs_days=NULL, ...) {
   # Convert input data (MCMC results, parameter vector or result of posterior$loglikelihood) into usable form
-  data <- as.data.table(plot.data(posterior, data))
+  ll.include <- if (!startsWith(ll, ".")) ll else character()
+  data <- as.data.table(plot.data(posterior, data, include=ll.include))
 
   # Plot individual components
-  ls <- names(posterior$components)
-  names(ls) <- ls
-  p <- do.call(c, lapply(ls, function(l) {
+  plots <- list()
+  labels <- list()
+  i <- 1
+  for(cn in names(posterior$components)) {
     # Extract the columns belonging to the current component from the data.
-    prefix <- paste0(l, ".")
+    prefix <- paste0(cn, ".")
     cols <- colnames(data)
     cols.comp <- cols[startsWith(cols, prefix)]
-    data.comp <- data[, c("ll_tot", cols.comp), with=FALSE]
-    colnames(data.comp) <- c("ll_grandtot", substr(cols.comp, start=nchar(prefix)+1, stop=nchar(cols.comp)))
+    data.comp <- data[, c(ll.include, cols.comp), with=FALSE]
+    colnames(data.comp) <- c(ll.include, substr(cols.comp, start=nchar(prefix)+1, stop=nchar(cols.comp)))
     # Call the component's plotting function
-    plot(posterior$components[[l]], data.comp, ll=ll,
-         plotlist=TRUE)
-  }))
-  
+    p <- lapply(plot(posterior$components[[cn]], data.comp, ll=ll, rs_days=rs_days, plotlist=TRUE), function(p) {
+      p + ggplot2::theme(plot.margin = margin(t=20, r=5)) 
+    })
+    j <- i + length(p)
+    plots[i:(j-1)] <- p
+    labels[i:(j-1)] <- rep(list(cn), j-i)
+    i <- j
+  }
+
   # Either return a list of plots, or arrange them in a grid with ggarrange
-  if (!plotlist)
-    return(ggpubr::ggarrange(plotlist=p, align="hv", ...))
-  else
-    return(p)
+  if (!plotlist) {
+    args <- list(align="hv",
+                 labels=labels, label.x=0.5, label.y=1, hjust=0.5, vjust=1.5,
+                 font.label=list(size=11, face="bold"),
+                 common.legend=(!is.null(ll) && (ll=="ll_grandtot")))
+    args <- modifyList(args, list(...))
+    return(do.call(ggpubr::ggarrange, c(list(plotlist=plots), args)))
+  } else
+    return(plots)
 }
