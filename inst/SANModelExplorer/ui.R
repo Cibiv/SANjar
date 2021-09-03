@@ -85,7 +85,7 @@ fluidPage(
                                              htmlOutput("lineage_aliases_auto_message")))
                  )
         ),
-        tabPanel("Data & Parameter Sets",
+        tabPanel("Data & Models",
                  fluidRow(column(width=6,
                                  selectInput("dataset", label="Dataset", width="100%",
                                              selected=character(0), choices=character(0)))),
@@ -93,10 +93,10 @@ fluidPage(
                                  selectInput("datagroup", label="Group", width="100%",
                                              selected=character(0), choices=character(0)))),
                  fluidRow(column(width=6,
-                                 selectInput("loadfrom", label="Use parameter set", width="100%",
-                                             selected=character(0), choices=c("select set to load"="", character(0))))),
+                                 selectInput("loadfrom", label="Load model from", width="100%",
+                                             selected=character(0), choices=c("select model to load"="", character(0))))),
                  fluidRow(column(width=6,
-                          textInput("saveas", label="Save parameter set as", width="100%",
+                          textInput("saveas", label="Save model as", width="100%",
                                     placeholder="filename"),
                           actionButton("save", label="Save")))
         )

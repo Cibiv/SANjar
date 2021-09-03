@@ -5,9 +5,10 @@ library(ggplot2)
 library(scales)
 
 # Parameters:
-#  LOCATION.PARAMETERSETS
-#  DEFAULT.PARAMETERSET
 #  DATASETS
+#  MODELS
+#  DEFAULT.MODEL
+#  LOCATION.MODELS
 
 # Pattern defining valid "saveas" filenames for parameter sets
 FILENAME.PATTERN <- "^[A-Za-z0-9. -]*$"
@@ -28,16 +29,9 @@ theme_set(theme_grey(base_size = 20))
 theme_update(legend.position="bottom",
              legend.key.width = unit(15,"mm"))
 
-# Return a list of saved parameter sets
-parametersets.list <- function() {
-    files <- list.files(file.path(LOCATION.PARAMETERSETS))
-    p <- "\\.rd$"
-    sub(x=files[grepl(p, files)], pattern=p, replacement="")
-}
-
-# Convert a parameterset name to a full path
-parameterset.fullpath <- function(name) {
-    file.path(LOCATION.PARAMETERSETS, paste0(name, ".rd"))
+# Convert a model name to a full path
+modelfile.fullpath <- function(name) {
+    file.path(LOCATION.MODELS, paste0(name, ".rd"))
 }
 
 # Better ggplot2 logscale
@@ -70,10 +64,14 @@ make_legend_key_twocolor <- function(legend, row, column, color1, color2, patter
 }
 
 #' Return true if x and y have the same value, including both being NA
-is.samevalue <- function(x, y) {
+is.samevalue <- function(x, y, digits=NA) {
     if (is.atomic(x) && is.atomic(y)) {
         xv <- !is.na(x)
         yv <- !is.na(y)
+        if (is.numeric(x) && !is.na(digits))
+            x <- signif(x, digits)
+        if (is.numeric(y) && !is.na(digits))
+            y <- signif(y, digits)
         return(!((length(x) != length(y)) || any(xv != yv) || any(x[xv] != y[xv])))
     }
     else
@@ -81,12 +79,12 @@ is.samevalue <- function(x, y) {
 }
 
 #' Return true if the two rates tables are identical
-are.rates.identical <- function(r1, r2) {
+are.rates.identical <- function(r1, r2, digits=NA) {
     if (nrow(r1) != nrow(r2))
         return(FALSE)
     if (any(colnames(r1) != colnames(r2)))
         return(FALSE)
-    if (any(unlist(lapply(colnames(r1), function(c) { !is.samevalue(r1[[c]], r2[[c]]) }))))
+    if (any(unlist(lapply(colnames(r1), function(c) { !is.samevalue(r1[[c]], r2[[c]], digits=digits) }))))
         return(FALSE)
     return(TRUE)
 }
@@ -233,7 +231,7 @@ function(input, output, session) {
     input_rates <- reactiveVal(RATES.EMPTY)
     updateRateInput <- function(session, value, alwaysUpdateOutputAsWell=FALSE) {
         input.update <- function(v) {
-            if (!are.rates.identical(isolate(input_rates()), v))
+            if (!are.rates.identical(isolate(input_rates()), v, digits=2))
                 input_rates(v)
         }
         output.updated <- FALSE
@@ -576,9 +574,34 @@ function(input, output, session) {
         } else NULL
     })
 
-    # The currently loaded parameterset
+    # The available models
+    models <- function() {
+        # Create a list of model files in the folder LOCATION.MODELS
+        model.ext <- "\\.rd$"
+        files <- list.files(file.path(LOCATION.MODELS))
+        basenames <- sub(x=files[grepl(model.ext, files)], pattern=model.ext, replacement="")
+        models.files <- if (length(basenames) > 0) {
+            f <- as.list(paste0("file:", basenames))
+            names(f) <- basenames
+            list(`Files`=f)
+        } else NULL
+        
+        # Create a list of presents found in MODELS
+        models.presents <- if (length(MODELS) > 0) {
+            p <- as.list(paste0("preset:", names(MODELS)))
+            names(p) <- names(MODELS)
+            list(`Presets`=p)
+        } else NULL
+        
+        c(models.presents, models.files)
+    }
+    # Load parameter set "default" on start up
+    updateSelectInput(session, "loadfrom", selected=DEFAULT.MODEL,
+                      choices=c(list("select model to load"=""), models()))
+    
+    # The currently loaded model
     # Note that this reflects the values of the parameters at loading time
-    parameterset.loaded <- reactiveVal()
+    model.loaded <- reactiveVal()
     
     # Load parameters and update UI
     observeEvent(input$loadfrom, {
@@ -587,29 +610,44 @@ function(input, output, session) {
             return()
         }
         # Return if the selected file is already loaded
-        ps <- isolate(parameterset.loaded())
+        ps <- isolate(model.loaded())
         if (!is.null(ps) && is.character(ps$name) && (ps$name == input$loadfrom)) {
             message("Parameter set ", input$loadfrom, " is already loaded")
             return()
         }
-        # Load file
-        message("Loading parameter set ", input$loadfrom, " from ", parameterset.fullpath(input$loadfrom))
-        psenv <- new.env(parent=emptyenv())
-        load(file=parameterset.fullpath(input$loadfrom), envir=psenv)
-        print(ls(psenv))
-        ps <- if (exists("SAN.PARAMS", envir=psenv))
-            get("SAN.PARAMS", envir=psenv)
-        else if (length(ls(psenv)) == 1)
-            get(ls(psenv)[1], envir=psenv)
-        else
-            NULL
-        if (!is.null(ps))
-            parameterset.loaded(c(ps, list(name=input$loadfrom)))
-        else
-            message(parameterset.fullpath(input$loadfrom), " must either contain a single element, or an element named SAN.PARAMS")
+        # Load model
+        if (startsWith(input$loadfrom, "preset:")) {
+            modelname <- substring(input$loadfrom, 8)
+            message("Loading preset model '", modelname, "'")
+            model.loaded(c(MODELS[[modelname]], list(name=input$loadfrom)))
+        }
+        else if (startsWith(input$loadfrom, "file:")) {
+            modelname <- substring(input$loadfrom, 6)
+            modelfile <- modelfile.fullpath(modelname)
+            message("Loading model '", modelfile, "'")
+            modelenv <- new.env(parent=emptyenv())
+            load(file=modelfile, envir=modelenv)
+            model <- if (exists("SAN.MODEL", envir=modelenv))
+                get("SAN.MODEL", envir=modelenv)
+            else if (exists("SAN.PARAMS", envir=modelenv))
+                get("SAN.PARAMS", envir=modelenv)
+            else if (length(ls(modelenv)) == 1) {
+                m <- get(ls(modelenv)[1], envir=modelenv)
+                if (is.list(m) && all(c("s0", "rates") %in% names(m)))
+                    m
+                else
+                    NULL
+            }
+            else
+                NULL
+            if (!is.null(model))
+                model.loaded(c(model, list(name=input$loadfrom)))
+            else
+                message(modelfile, " should either contain a single element, or an element named SAN.PARAMS or SAN.MODEL")
+        }
     })
-    observeEvent(parameterset.loaded(), {
-        ps <- parameterset.loaded()
+    observeEvent(model.loaded(), {
+        ps <- model.loaded()
         if (is.null(ps))
             return()
         # Update parameter values
@@ -619,48 +657,38 @@ function(input, output, session) {
         if (!is.null(ps$rates))
             updateRateInput(session, value=ps$rates, alwaysUpdateOutputAsWell=TRUE)
     })
-    # Load parameter set "default" on startup
-    if (is.character(DEFAULT.PARAMETERSET))
-        updateSelectInput(session, "loadfrom", selected=DEFAULT.PARAMETERSET,
-                          choices=c("select set to load"="", parametersets.list()))
-    else if (is.list(DEFAULT.PARAMETERSET)) {
-        updateSelectInput(session, "loadfrom", selected=character(0),
-                          choices=c("select set to load"="", parametersets.list()))
-        parameterset.loaded(DEFAULT.PARAMETERSET)
-    } else {
-        stop("DEFAULT.PARAMETERSET be a parameterset object or the name of a parameter set to load")
-    }
     
     # If a loaded parameter set is changed, don't show it as selected anymore
     observeEvent(input$s0, {
-        ps <- isolate(parameterset.loaded())
+        ps <- isolate(model.loaded())
         if (is.null(ps$name))
             return()
         if (is.null(ps$s0) || is.samevalue(ps$s0, input$s0))
             return()
-        message("Parameter set has been modified (s0 changed), no longer matches ", parameterset.loaded()$name)
+        message("Parameter set has been modified (s0 changed), no longer matches ", model.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
-        parameterset.loaded(NULL)
+        model.loaded(NULL)
     })
     observeEvent(input$rates, {
-        ps <- isolate(parameterset.loaded())
+        ps <- isolate(model.loaded())
         if (is.null(ps$name))
             return()
-        if (is.null(ps$rates) || are.rates.identical(ps$rates, as.data.table(hot_to_r(input$rates))))
+        if (is.null(ps$rates) || are.rates.identical(ps$rates, as.data.table(hot_to_r(input$rates)), digits=2))
             return()
-        message("Parameter set has been modified (rates changed), no longer matches ", parameterset.loaded()$name)
+        message("Parameter set has been modified (rates changed), no longer matches ", model.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
-        parameterset.loaded(NULL)
+        model.loaded(NULL)
     })
 
     # Save the current set of parameters
-    parameterset.saveas <- function() {
-        SAN.PARAMS <- list(rates=as.data.table(hot_to_r(input$rates)),
-                           s0=input$s0)
+    model.saveas <- function() {
+        modelsrc <- paste0("file:", input$saveas)
+        SAN.MODEL <- list(rates=as.data.table(hot_to_r(input$rates)),
+                          s0=input$s0)
         tryCatch({
             if (!grepl(FILENAME.PATTERN, input$saveas))
                 stop("invalid filename")
-            save(SAN.PARAMS, file=parameterset.fullpath(input$saveas))
+            save(SAN.MODEL, file=modelfile.fullpath(input$saveas))
         }, error=function(e) {
             # Show error
             showModal(modalDialog(
@@ -669,11 +697,11 @@ function(input, output, session) {
                 footer = modalButton("OK")
             ))
         })
-        parameterset.loaded(c(SAN.PARAMS, list(name=input$saveas)))
+        model.loaded(c(SAN.MODEL, list(name=modelsrc)))
         # Clear saveas filename after saving
         updateTextInput(session, "saveas", value="")
         # Indicate the just-saved parameter set as being currently loaded
-        updateSelectInput(session, "loadfrom", choices=parametersets.list(), selected=input$saveas)
+        updateSelectInput(session, "loadfrom", choices=models(), selected=modelsrc)
     }
     
     # Save parameters to file
@@ -685,7 +713,7 @@ function(input, output, session) {
                 "File names must be non-empty and consist only of letters, numbers, spaces, dots and dashes",
                 footer = modalButton("OK")
             ))
-        } else if (file.exists(parameterset.fullpath(input$saveas))) {
+        } else if (file.exists(modelfile.fullpath(input$saveas))) {
             # Ask whether to overwrite an existing file
             showModal(modalDialog(
                 title=paste0("Overwrite ", input$saveas, "?"),
@@ -696,14 +724,14 @@ function(input, output, session) {
             ))
         } else {
             # New file
-            parameterset.saveas()
+            model.saveas()
         }
     })
     observeEvent(input$saveOverwrite, {
         removeModal()
         # Overwrite existing file
-        message("Saving current parameter set as ", input$saveas, " to ", parameterset.fullpath(input$saveas))
-        parameterset.saveas()
+        message("Saving current parameter set as ", input$saveas, " to ", modelfile.fullpath(input$saveas))
+        model.saveas()
     })
     
     # Rate table
