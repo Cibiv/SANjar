@@ -583,6 +583,38 @@ map.estimate.SANMCMC <- function(sanmcmc, ms.tolerance=0.1, H.adjust=1.0, H="Hpi
   return(ms$mode[i.mode,])
 }
 
+sanmcmc.evaluate <- function(sanmcmc, which="final", expressions=names(sanmcmc$variables), extra=character()) {
+  varnames <- names(sanmcmc$variables)
+  data <- sanmcmc[[which]]
+  varidx <- which(colnames(data) %in% varnames)
+  ididx <- 1:(min(varidx)-1)
+  
+  labels <- list()
+  r <- do.call(cbind, c(list(data[, ididx, with=FALSE]),
+                   lapply(c(as.list(expressions), as.list(extra)), function(expr) {
+    # Translate strings into expressions. For added convenience, column
+    # names are quoted automatically, this makes e.g. writing "40S-40A" work.
+    if (is.character(expr)) {
+      label <- expr
+      expr <- gsub(paste0("(", paste0("(?:", varnames, ")", collapse="|"), ")"), "`\\1`", expr)
+      expr <- parse(text=expr)
+    } else {
+      label <- as.character(expr)
+    }
+    if (!is.expression(expr) && !is.name(expr))
+      stop("invalid expression of type ", class(expr))
+    
+    labels <<- c(labels, list(label))
+                     
+    # Evaluate expression and return single-column data.table
+    r <- data[, list(eval(expr)) ]
+    colnames(r) <- label
+    r
+  })))
+  attr(r, "expressions") <- as.character(labels)
+  r
+}
+
 #' Computes various summary statistics of the posterior distribution
 #' 
 #' @export
