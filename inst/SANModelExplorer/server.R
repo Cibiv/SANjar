@@ -69,9 +69,9 @@ is.samevalue <- function(x, y, digits=NA) {
         xv <- !is.na(x)
         yv <- !is.na(y)
         if (is.numeric(x) && !is.na(digits))
-            x <- signif(x, digits)
+            x <- round(x, digits)
         if (is.numeric(y) && !is.na(digits))
-            y <- signif(y, digits)
+            y <- round(y, digits)
         return(!((length(x) != length(y)) || any(xv != yv) || any(x[xv] != y[xv])))
     }
     else
@@ -231,7 +231,7 @@ function(input, output, session) {
     input_rates <- reactiveVal(RATES.EMPTY)
     updateRateInput <- function(session, value, alwaysUpdateOutputAsWell=FALSE) {
         input.update <- function(v) {
-            if (!are.rates.identical(isolate(input_rates()), v, digits=2))
+            if (!are.rates.identical(isolate(input_rates()), v, digits=4))
                 input_rates(v)
         }
         output.updated <- FALSE
@@ -673,7 +673,7 @@ function(input, output, session) {
         ps <- isolate(model.loaded())
         if (is.null(ps$name))
             return()
-        if (is.null(ps$rates) || are.rates.identical(ps$rates, as.data.table(hot_to_r(input$rates)), digits=2))
+        if (is.null(ps$rates) || are.rates.identical(ps$rates, as.data.table(hot_to_r(input$rates)), digits=4))
             return()
         message("Parameter set has been modified (rates changed), no longer matches ", model.loaded()$name)
         updateSelectInput(session, "loadfrom", selected=character(0))
