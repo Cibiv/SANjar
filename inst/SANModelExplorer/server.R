@@ -542,7 +542,8 @@ function(input, output, session) {
                 [library_size_manual_or_auto(), on="day", nomatch=NULL]
                 [, list(
                     dt, lid, S, A, N, C,
-                    R=seqsim(C, reads.target=library_size[1], efficiency=pcr_efficiency[1]),
+                    R=seqsim(C, reads.target=library_size[1], efficiency=pcr_efficiency[1],
+                             method=if (input$pcr_coarse) "gamma" else NULL),
                     reads_per_cell=library_size[1]/sum(C)
                 ), by=.(day, sid)])
             r[, C.obs := R / reads_per_cell]
