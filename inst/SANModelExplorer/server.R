@@ -192,8 +192,8 @@ function(input, output, session) {
             ds
         }
         # Normalize library sizes if lineage sizes are relative and normalization was requested
-        if ((ds$unit == "reads") && input$stochastic_lsd_normlibsize)
-            group <- SANjar::normalize_library_sizes(group, method="scale")
+        if ((ds$unit == "reads") && (input$stochastic_lsd_normlibsize != "none"))
+            group <- SANjar::normalize_library_sizes(group, method=input$stochastic_lsd_normlibsize)
         group
     })
     dataset_tfinal <- reactive(({
