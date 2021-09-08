@@ -365,14 +365,11 @@ partial_organoid_sizes.LTData <- function(partial, whole, sublib) {
 #' 
 #' @export
 normalize_library_sizes.LTData <- function(lt, method="scale") {
-  switch(match.arg(method, choices=c("scale")),
-         `scale`=normalize_library_sizes.LTData.scale(lt))
-}
-
-normalize_library_sizes.LTData.scale <- function(lt) {
   if (any(is.na(lt$sequencing[, library_size])))
     stop("LTData must contain valid library sizes in sequencing parameter table to normalize library sizes, ",
          "call estimate_sequencing_parameters first")
+  
+  method <- match.arg(method, c("scale", "subsample"))
   
   # Determine library-size-normalized sequencing parameters 
   sequencing.norm <- lt$sequencing[, {
@@ -393,7 +390,7 @@ normalize_library_sizes.LTData.scale <- function(lt) {
          lineage_aliases=lineage_aliases)
   }, by=c(lt$groups, "day")]
   setkeyv(sequencing.norm, c(lt$groups, "day", "sid"))
-
+  
   # Transform read counts
   lineagesizes.norm <- copy(lt$lineagesizes)
   lineagesizes.norm[, reads := {
@@ -404,7 +401,12 @@ normalize_library_sizes.LTData.scale <- function(lt) {
       stop("missing sequencing parameters for sample ", paste(names(.BY), "=", as.character(.BY), collapse=","))
     
     # Scale read counts
-    reads.norm <- round(as.numeric(reads) * (seq.norm$library_size / seq$library_size))
+    reads.norm <- if (method == "scale")
+      round(as.numeric(reads) * (seq.norm$library_size / seq$library_size))
+    else if (method == "subsample")
+      rbinom(.N, size=round(as.numeric(reads)), prob=seq.norm$library_size / seq$library_size)
+    else
+      stop("unknown normalization method ", method)
     # Re-apply phantom threshold
     ifelse(reads.norm >= seq.norm$phantom_threshold, reads.norm, 0)
   }, keyby=c(lt$groups, "day", "sid")]
