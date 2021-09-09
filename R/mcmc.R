@@ -198,6 +198,8 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       if (!is.null(initial.meta))
         initial.meta[ll.inf, colnames(initial.meta) := initial.meta[ll.inf.repidx] ]
     }
+    # Reset number of accepted proposals before main MCMC part begins
+    reset.naccepts <- TRUE
   } else {
     # Initial states were specified
     if (!is.null(candidates))
@@ -211,7 +213,15 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       initial.meta <- initial[, -(1:ci.lastvar)]
     else
       initial.meta <- NULL
-    initial <- initial[, c(list(chain=1:.N, naccepts=0), .SD[, c("ll", fixed, varnames), with=FALSE]) ]
+    # Add chain and naccepts columns to initial states
+    if (!("chain" %in% colnames(initial)))
+      initial[, chain := 1:.N]
+    if (!("naccepts" %in% colnames(initial)))
+      initial[, naccepts := 0]
+    # Reorder columns to match the expected order
+    initial <- initial[, c("chain", "naccepts", "ll", fixed, varnames), with=FALSE]
+    # Don't reset number of accepted proposals before main MCMC part begins
+    reset.naccepts <- FALSE
   }
   if (llfun.average > 1) {
     message("Will average the likelihood over ", llfun.average, " evaluations, re-evaluating initial likelihoods now")
@@ -250,7 +260,8 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
   
   # Setup MCMC variables
   states <- copy(initial)
-  states[, naccepts := 0]
+  if (reset.naccepts)
+    states[, naccepts := 0 ]
   states.meta <- initial.meta
   if (keep.history) {
     history <- list(states[, c(list(step=0), .SD) ])
