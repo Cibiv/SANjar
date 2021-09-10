@@ -535,47 +535,57 @@ san_posterior_combine <- function(..., components=list(), parametrization=NULL, 
 #' Parallelizes likelihood evaluations for different parameter combinations
 #' 
 #' @export
-san_posterior_parallel <- function(posterior, cluster) {
+san_posterior_parallel <- function(posterior, cluster, keep.source=FALSE) {
   if (!("SANPosterior" %in% class(posterior)))
     stop("posterior argument must be an instance of SANPosterior (e.g. created with san_posterior())")
 
   if (is.null(cluster))
     return(posterior)
   
-  # Setup cluster
-  clusterEvalQ(cluster, {
+  # Send likelihood evaluation function to cluster
+  id <- paste0(lapply(1:4, function(i) sprintf("%04x", as.integer(sample.int(size=1, n=2**16)-1))), collapse="")
+  loglikelihood.worker.name <- paste(".san_posterior_parallel", id, "loglikelihood.worker", sep=".")
+  setup.worker <- function(i) {
+    # Load libraries on worker
     library(OpenMPController)
     library(data.table)
     library(SANjar)
     library(gwpcR)
-    
+
     # No nested parallelism
     data.table::setDTthreads(1)
     OpenMPController::omp_set_num_threads(1)
-  })
+    
+    # Assign name in the global environment to the likelihood function 
+    if (exists(loglikelihood.worker.name, envir=globalenv()))
+      stop("name ", loglikelihood.worker.name, " is already taken on node ", i)
+    assign(loglikelihood.worker.name, loglikelihood.worker.impl, envir=globalenv())
+  }
+  environment(setup.worker) <- list2env(list(
+    loglikelihood.worker.name=loglikelihood.worker.name,
+    loglikelihood.worker.impl=posterior$loglikelihood
+  ), parent=baseenv())
+  clusterApply(cluster, 1:length(cluster), setup.worker)
+  
+  # Create wrapper function to evaluate likelihoods on workers
+  loglikelihood.worker <- eval(bquote(function(...) .(as.name(loglikelihood.worker.name))(...)))
+  environment(loglikelihood.worker) <- globalenv()
 
-  # Create environment to evaluate functions in
+  # Create parallel-evaluation log-likelihood function
   env <- new.env(parent=.SANjar.env)
   env$cluster <- cluster
-
-  # Serial log-likelihood evaluation function
+  env$loglikelihood.worker <- loglikelihood.worker
   env$loglikelihood.serial <- posterior$loglikelihood
-
-  # Parallel log-likelihood function
-  loglikelihood <- function(params, cutoffs=-Inf) {
+  posterior$loglikelihood <- function(params, cutoffs=-Inf) {
     stopifnot(is.parameter.vector(params) || is.parameter.matrix(params))
     stopifnot((length(cutoffs) == 1) || (is.parameter.matrix(params) && (length(cutoffs) == nrow(params))))
     if (is.parameter.vector(params))
       loglikelihood.serial(params, cutoffs)
     else
-      rbindlist(parMLapply(cl=cluster, loglikelihood.serial, asplit(params, MARGIN=1), as.list(cutoffs)))
+      rbindlist(parMLapply(cl=cluster, loglikelihood.worker, asplit(params, MARGIN=1), as.list(cutoffs)))
   }
-  environment(loglikelihood) <- env
-  env$loglikelihood <- loglikelihood
-  
-  # Replace log-likelihood function with parallel version
-  posterior$loglikelihood <- loglikelihood
-  
+  environment(posterior$loglikelihood) <- env
+
   return(posterior)
 }
 
