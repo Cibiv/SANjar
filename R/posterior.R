@@ -547,15 +547,10 @@ san_posterior_parallel <- function(posterior, cluster, keep.source=FALSE) {
   loglikelihood.worker.name <- paste(".san_posterior_parallel", id, "loglikelihood.worker", sep=".")
   setup.worker <- function(i) {
     # Load libraries on worker
-    library(OpenMPController)
     library(data.table)
     library(SANjar)
     library(gwpcR)
 
-    # No nested parallelism
-    data.table::setDTthreads(1)
-    OpenMPController::omp_set_num_threads(1)
-    
     # Assign name in the global environment to the likelihood function 
     if (exists(loglikelihood.worker.name, envir=globalenv()))
       stop("name ", loglikelihood.worker.name, " is already taken on node ", i)
