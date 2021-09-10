@@ -446,7 +446,8 @@ san_posterior<- function(parametrization, lt, cc.cutoff=1e7, p.cutoff=1e-2, ll.s
     if (is.parameter.vector(params))
       ll_evaluate(params, cutoffs)
     else
-      rbindlist(mapply(ll_evaluate, asplit(params, MARGIN=1), as.list(cutoffs), SIMPLIFY=FALSE))
+      rbindlist(mapply(ll_evaluate, asplit(params, MARGIN=1), as.list(cutoffs), SIMPLIFY=FALSE),
+                use.names=FALSE)
   }
   environment(loglikelihood) <- env
   env$loglikelihood <- loglikelihood
@@ -577,7 +578,8 @@ san_posterior_parallel <- function(posterior, cluster, keep.source=FALSE) {
     if (is.parameter.vector(params))
       loglikelihood.serial(params, cutoffs)
     else
-      rbindlist(parMLapply(cl=cluster, loglikelihood.worker, asplit(params, MARGIN=1), as.list(cutoffs)))
+      rbindlist(parMLapply(cl=cluster, loglikelihood.worker, asplit(params, MARGIN=1), as.list(cutoffs)),
+                use.names=FALSE)
   }
   environment(posterior$loglikelihood) <- env
 
