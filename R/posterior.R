@@ -536,7 +536,7 @@ san_posterior_combine <- function(..., components=list(), parametrization=NULL, 
 #' Parallelizes likelihood evaluations for different parameter combinations
 #' 
 #' @export
-san_posterior_parallel <- function(posterior, cluster, keep.source=FALSE) {
+san_posterior_parallel <- function(posterior, cluster) {
   if (!("SANPosterior" %in% class(posterior)))
     stop("posterior argument must be an instance of SANPosterior (e.g. created with san_posterior())")
 
