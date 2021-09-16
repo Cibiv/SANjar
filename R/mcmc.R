@@ -652,7 +652,7 @@ summarystats.SANMCMC <- function(sanmcmc, map, expressions=names(sanmcmc$variabl
       
       # For MCMC variables, the MAP (maximum á posteriori) is the maximal multi-variate mode
       # For other expressions, the mode is determined using univariate KDE.
-      m <- if (is.name(expr[[1]]) && (length(x) == 1)) {
+      m <- if (is.name(expr[[1]]) && (length(expr) == 1)) {
         # Expression is a single variable name, use multi-variate MAP estimates computed above
         eval(expr, envir=as.list(map))
       } else {
