@@ -169,7 +169,14 @@ plot.SANCombinedPosterior <-  function(posterior, data, ll=".ll_tot", plotlist=F
 #' Plot posterior distribution
 #'
 #' @export
-plot.SANMCMC <- function(sanmcmc, which="final", point=NULL, expressions=names(sanmcmc$variables), extra=character()) {
+plot.SANMCMC <- function(sanmcmc, type="violins", which="final", point=NULL, expressions=names(sanmcmc$variables), extra=character(), ...) {
+  type <- match.arg(type, c("violins", "parcord"))
+  switch(type,
+         `violins`=plot.SANMCMC.violins(sanmcmc, which=which, point=point, expressions=expressions, extra=extra, ...),
+         `parcord`=plot.SANMCMC.parcord(sanmcmc, which=which, point=point, expressions=expressions, extra=extra, ...))
+}
+
+plot.SANMCMC.violins <- function(sanmcmc, which="final", point, expressions, extra) {
   data <- sanmcmc.evaluate(sanmcmc, which=which, expressions=expressions, extra=extra)
   p <- ggplot2::ggplot(data=melt(data, id.vars="chain", measure.vars=attr(data, "expressions"))) +
     ggplot2::geom_violin(aes(x=variable, y=value), scale="width")
@@ -178,5 +185,15 @@ plot.SANMCMC <- function(sanmcmc, which="final", point=NULL, expressions=names(s
                                    aes(x=as.integer(variable)-0.45, xend=as.integer(variable)+0.45,
                                        y=value, yend=value),
                                    linetype="dashed")
+  return(p)
+}
+
+plot.SANMCMC.parcord <- function(sanmcmc, which, point, expressions, extra, linecolor="#00000010", pointcolor="darkblue") {
+  data <- sanmcmc.evaluate(sanmcmc, which=which, expressions=expressions, extra=extra)
+  p <- ggplot2::ggplot(data=melt(data, id.vars="chain", measure.vars=attr(data, "expressions"))) +
+    ggplot2::geom_line(aes(x=variable, y=value, group=chain), color=linecolor)
+  if (!is.null(point))
+    p <- p + ggplot2::geom_point(data=melt(as.data.table(as.list(point)), measure.vars=attr(data, "expressions")),
+                                 aes(x=as.integer(variable), y=value), color=pointcolor)
   return(p)
 }
