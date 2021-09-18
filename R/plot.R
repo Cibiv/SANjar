@@ -169,8 +169,14 @@ plot.SANCombinedPosterior <-  function(posterior, data, ll=".ll_tot", plotlist=F
 #' Plot posterior distribution
 #'
 #' @export
-plot.SANMCMC <- function(sanmcmc, which="final", expressions=names(sanmcmc$variables), extra=character()) {
+plot.SANMCMC <- function(sanmcmc, which="final", point=NULL, expressions=names(sanmcmc$variables), extra=character()) {
   data <- sanmcmc.evaluate(sanmcmc, which=which, expressions=expressions, extra=extra)
-  ggplot2::ggplot(data=melt(data, id.vars="chain", measure.vars=attr(data, "expressions"))) +
-    ggplot2::geom_violin(aes(x=variable, y=value))
+  p <- ggplot2::ggplot(data=melt(data, id.vars="chain", measure.vars=attr(data, "expressions"))) +
+    ggplot2::geom_violin(aes(x=variable, y=value), scale="width")
+  if (!is.null(point))
+    p <- p + ggplot2::geom_segment(data=melt(as.data.table(as.list(point)), measure.vars=attr(data, "expressions")),
+                                   aes(x=as.integer(variable)-0.45, xend=as.integer(variable)+0.45,
+                                       y=value, yend=value),
+                                   linetype="dashed")
+  return(p)
 }
