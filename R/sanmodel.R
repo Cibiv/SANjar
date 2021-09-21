@@ -99,3 +99,34 @@ set_Tmax.SANModel <- function(model, value) {
   model$rates[nrow(model$rates), Tmax := value]
   return(model)
 }
+
+#' Simulate lineage tracing data 
+#'
+#' @export
+simulate.SANModel <- function(model, template, steps=c("aliases", "seqsim", "threshold"), method.seqsim=NULL, p_cutoff=1e-3) {
+  lineagesizes <- template$sequencing[, {
+    # Simulate stochastic model
+    r <- san_stochastic(L=model$s0, s0=1, rates=ratestable.fill.na(model$rates), Tmax=max(day), p_cutoff=p_cutoff)
+    # Rename "t" column to "day"
+    colnames(r) <- ifelse(colnames(r) == "t", "day", colnames(r))
+    # Compute total lineage sizes C
+    r[, C := S + A + N ]
+    # Add "sid" column
+    r[, sid := 0 ]
+    # Simulate sequencing
+    r <- san_sequencing(r, .SD, steps=steps, method.seqsim=method.seqsim)
+    # Generate lineage size table
+    if ("seqsim" %in% steps)
+      r[, list(day, reads=R, cells=C.obs)]
+    else
+      r[, list(day, cells=C)]
+  }, by=c(template$groups, "sid")]
+  
+  organoidsizes <- template$sequencing[, {
+    san_deterministic(s0=model$s0, rates=ratestable.fill.na(model$rates), samples_per_day=1)[, list(
+      day=t, cells=S+A+N
+    )]
+  }, by=template$groups]
+  
+  return(LTData(lineagesizes, organoidsizes, template$sequencing, unit=template$unit, groups=template$groups))
+}
