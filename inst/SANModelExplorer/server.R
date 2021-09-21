@@ -167,9 +167,7 @@ function(input, output, session) {
 
     # Dataset (after filtering down to a single group)
     dataset_group <- reactive({
-        # It's a waste to respond to dataset changes here, since changing
-        # the dataset will also update dataset_groups() 
-        ds <- isolate(dataset())
+        ds <- dataset()
         # Select group
         group <- if (nrow(dataset_groups()) > 1) {
             # Translate label to group key
