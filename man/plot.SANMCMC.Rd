@@ -6,9 +6,12 @@
 \usage{
 \method{plot}{SANMCMC}(
   sanmcmc,
+  type = "violins",
   which = "final",
+  point = NULL,
   expressions = names(sanmcmc$variables),
-  extra = character()
+  extra = character(),
+  ...
 )
 }
 \description{
