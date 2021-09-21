@@ -62,3 +62,40 @@ ratestable.fill.na.SANModel <- function(model) {
   model$rates <- ratestable.fill.na(model$rates)
   return(model)
 }
+
+#' Return the final time, i.e. the time up to which the model defines rates
+#'
+#' @export
+Tmax <- function(model) UseMethod("Tmax")
+
+#' Return the final time, i.e. the time up to which the model defines rates
+#'
+#' @export
+Tmax.SANModel <- function(model) {
+  return(model$rates[nrow(model$rates), Tmax])
+}
+
+#' Update the model's final time, i.e. the time up to which it defines rates
+#' 
+#' If the final time exceeds the model's current final time, the validity interval
+#' of the last rate set will be extended until the new final time. Otherwise, the
+#' validity period of the rates set active at the new final time will be set to the
+#' new final time and any later rate sets will be removed.
+#' 
+#' @export
+`Tmax<-` <- function(model, value) set_Tmax(model, value)
+set_Tmax <- function(model, value) UseMethod("set_Tmax")
+
+set_Tmax.SANModel <- function(model, value) {
+  # Fill in empty cell
+  model$rates <- ratestable.fill.na(model$rates)
+  # Keep all rows whose validity period ends before the new Tmax, plus
+  # one more row because that row's validity period then covers Tmax
+  # (if no such row exists, )
+  keep <- model$rates$Tmax < value
+  keep[which.min(keep)] <- TRUE
+  model$rates <- model$rates[keep]
+  # Limit the validity period of the last rate set to the new Tmax
+  model$rates[nrow(model$rates), Tmax := value]
+  return(model)
+}
