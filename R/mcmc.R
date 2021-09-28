@@ -19,7 +19,7 @@ summarystats <- function(x, ...) UseMethod("summarystats")
 #' Samples from a distribution using the Metropolis-Hastings MCMC algorithm  
 #' 
 #' @export
-mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
+mcmc <- function(llfun, variables, fixed=character(), blocks=NULL, llfun.average=1,
                  steps=NA, accepts=NA, chains, candidate.samples=chains,
                  candidates=NULL, initial.samplewithreplacement=FALSE, initial=NULL, 
                  keep.history=FALSE, keep.initial=FALSE, keep.candidates=FALSE,
@@ -39,6 +39,16 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
   varnames <- names(variables)
   names(varnames) <- varnames
   
+  # Prepare lists of fixed parameters and variables for every block
+  if (is.null(blocks))
+    blocks <- list(varnames)
+  stopifnot(is.list(blocks))
+  blocks.fixed <- lapply(blocks, function(b) {
+    if (!is.character(b) || (!all(b %in% varnames)))
+      stop("invalid variable block ", b)
+    setdiff(varnames, b)
+  })
+
   # Average likelihoods if requested
   average.likelihoods <- function(parameters, cutoffs) {
     if (llfun.average > 1) {
@@ -63,22 +73,29 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
   }
 
   # Proposal generator for multivariate normal proposals
-  fill.proposals.mvnorm <- function(proposals, states) {
+  fill.proposals.mvnorm <- function(proposals, block.index, states) {
+    # Simply copy variables not in the current block
+    if (length(blocks.fixed[[block.index]]) > 0) {
+      fn <- blocks.fixed[[block.index]]
+      proposals[valid==TRUE, (fn) := states[proposals$valid, fn, with=FALSE ] ]
+    }
     # Generate proposals by sampling displacements using current covariances and radius,
     # and displacing the previous samples accordingly. We only really generate proposals
     # for chains that need extension.
-    displacements <- mvtnorm::rmvnorm(n=sum(proposals$valid), sigma=Vproposal) * Rproposal
-    colnames(displacements) <- names(varnames)
-    proposals[valid==TRUE, (varnames) := lapply(varnames, function(v) {
+    vn <- blocks[[block.index]]
+    displacements <- mvtnorm::rmvnorm(n=sum(proposals$valid), sigma=Vproposal[[block.index]]) * Rproposal[block.index]
+    colnames(displacements) <- vn
+    proposals[valid==TRUE, (vn) := lapply(vn, function(v) {
       states[proposals$valid, eval(as.name(v))] + displacements[, v]
     })]
   }
-  
+
   # Proposal generator for Metropolis-within-Gibbs sampling
   fill.proposals.gibbs <- function(proposals, direction.index, states) {
     if (direction.index == 1) {
       # Re-compute the factorization of the covariance matrix before starting a new iteration
-      ev <- eigen(Vproposal, symmetric=TRUE)
+      stopifnot(length(Vproposal) == 1)
+      ev <- eigen(Vproposal[[1]], symmetric=TRUE)
       A <- t(ev$vectors) * sqrt(pmax(ev$values, 0))
       colnames(A) <- varnames
       Vproposal.directions <<- asplit(A, MARGIN=1)
@@ -235,70 +252,39 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     message(paste0("  ", capture.output(print(initial.signif)), collapse="\n"))
   }
   
-  # Initialize proposal distribution
-  # If we started with ABC-style uniform sampling of the parameter space, we compute
-  # the initial covariance estimate using all samples and their likelihoods, since
-  # this gives a more precise estimate than using just the initial states.
-  Vproposal <- if (is.null(initial.Vproposal))
-    cov(initial[, varnames, with=FALSE])
-  else
-    initial.Vproposal
-  # For Metropolis-within-Gibbs, we scale each component separately, but
-  # for multivariate normal proposals, there is only a single scaling factor
-  Rproposal <- if (directional.metropolis.gibbs)
-    sapply(varnames, function(v) initial.Rproposal)
-  else
-    initial.Rproposal
-  if (verbose) {
-    message("Initial proposal distribution")
-    message("  covariance matrix V:")
-    message(paste0("    ", capture.output(print(signif(Vproposal, 3))), collapse="\n"))
-    if (!is.null(acceptance.target))
-      message("  radius R: ", paste(signif(Rproposal, 3), collapse=" "))
-  }
-  Vproposal.directions <- NULL
-  
-  # Setup MCMC variables
-  states <- copy(initial)
-  if (reset.naccepts)
-    states[, naccepts := 0 ]
-  states.meta <- initial.meta
-  if (keep.history) {
-    history <- list(states[, c(list(step=0), .SD) ])
-  }
-  
   # Prevent the variances of the proposal distribution from becoming too small
-  Vproposal.clamp <- function() {
+  Vclamp <- function(V, states) {
+    vn <- colnames(V)
     # Compute vector of adjustment factors which make the i-th CV equal to minimal.Vproposal.CV
-    sd.min <- sapply(varnames, function(v) { minimal.Vproposal.CV * mean(states[[v]]) })
-    var <- diag(Vproposal)
+    sd.min <- sapply(vn, function(v) { minimal.Vproposal.CV * mean(states[[v]]) })
+    var <- diag(V)
     f <- sd.min / sqrt(var)
     if (any(f > 1)) {
       overshoot <- 2
       adj <- ifelse(f>1, overshoot*f, 1)
       if (verbose)
         message("Variances of proposal distribution clamped to ",
-                paste0(varnames[f>1], "=", signif(overshoot*sd.min[f>1]^2, 3), collapse=", "))
+                paste0(vn[f>1], "=", signif(overshoot*sd.min[f>1]^2, 3), collapse=", "))
       # Adjust for i=1,..,k, adjust i-th row and i-th column of V by the i-th adjustment factor
       M <- outer(adj, adj)
       # The adjustment may be infinite if V contained zeros. To handle that, first set any
       # non-finite entries in M to zero to avoid computing "0 * inf" which yields NaN
       M[!is.finite(M)] <- 0
-      Vproposal <<- Vproposal * M
+      V <- V * M
       # Then set any zeros in the diagonal of V to the desired minimal variance
       adj.inf <- !is.finite(adj)
-      diag(Vproposal)[adj.inf] <<- overshoot*sd.min[adj.inf]^2
+      diag(V)[adj.inf] <- overshoot*sd.min[adj.inf]^2
     }
-
+    
     # Restrict correlations to at most maximal.Vproposal.corr
     if (maximal.Vproposal.corr == 0) {
       # Remove all covariances
-      Vproposal <- diag(diag(Vproposal))
+      V <- diag(diag(V))
     } else if (maximal.Vproposal.corr == 1.0) {
       # Nothing to do
     } else {
       # Compute adjustment factors which ensure that no correlation exceeds maximal.Vproposal.corr
-      Vcorr <- Vproposal / sqrt(diag(Vproposal) %o% diag(Vproposal))
+      Vcorr <- V / sqrt(diag(V) %o% diag(V))
       f <- Vcorr / maximal.Vproposal.corr
       diag(f) <- 1
       if (any(f > 1)) {
@@ -312,17 +298,51 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
         # the reduced correlations.
         M <- s %o% s
         diag(M) <- 1
-        Vproposal <<- Vproposal / M
+        V <- V / M
         if (verbose) {
-          p <- (f>1) & upper.tri(Vproposal)
+          p <- (f>1) & upper.tri(V)
           message("Covariances of proposal distribution reduced to ",
-                  paste0(outer(varnames, varnames, function(a,b) paste0("cov(",a,",",b,")"))[p],
-                         "=", signif(Vproposal[p], digits=3), collapse=", "))
+                  paste0(outer(vn, vn, function(a,b) paste0("cov(",a,",",b,")"))[p],
+                         "=", signif(V[p], digits=3), collapse=", "))
         }
       }
     }
+    
+    return(V)
   }
-  Vproposal.clamp()
+  
+  # Setup MCMC variables
+  states <- copy(initial)
+  if (reset.naccepts)
+    states[, naccepts := 0 ]
+  states.meta <- initial.meta
+  if (keep.history) {
+    history <- list(states[, c(list(step=0), .SD) ])
+  }
+  
+  # Initialize proposal distribution
+  Vproposal <- if (is.null(initial.Vproposal)) {
+    lapply(blocks, function(vn) Vclamp(cov(initial[, vn, with=FALSE]), states))
+  } else {
+    stopifnot(all(varnames %in% colnames(initial.Vproposal)))
+    stopifnot(all(varnames %in% rownames(initial.Vproposal)))
+    lapply(blocks, function(vn) Vclamp(initial.Vproposal[vn, vn], states))
+  }
+  Vproposal.directions <- NULL
+  # For Metropolis-within-Gibbs, we scale each component separately, but
+  # for multivariate normal proposals, there is only a single scaling factor
+  Rproposal <- if (directional.metropolis.gibbs)
+    sapply(varnames, function(v) initial.Rproposal)
+  else
+    sapply(blocks, function(v) initial.Rproposal)
+  if (verbose) {
+    message("Initial proposal distribution")
+    message("  covariances:")
+    for(i in 1:length(blocks))
+      message(paste0("    ", capture.output(print(signif(Vproposal[[i]], 3))), collapse="\n"))
+    if (!is.null(acceptance.target))
+      message("  radii: ", paste(signif(Rproposal, 3), collapse=" "))
+  }
   
   # Run k Metropolis-Hasting MCMC steps
   step <- 0
@@ -330,9 +350,10 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     step <- step + 1
     
     # If we're doing metropolis-within-gibbs, we iterate through the possible directions individually
-    direction <- if (directional.metropolis.gibbs)
-      direction <- 1 + (step - 1) %% length(variables)
-    else 1
+    index <- if (directional.metropolis.gibbs)
+      1 + (step - 1) %% length(variables)
+    else
+      1 + (step - 1) %% length(blocks)
 
     # Copy states, since data.table does not copy on update
     states <- copy(states)
@@ -350,9 +371,9 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     
     # Generate proposals
     if (directional.metropolis.gibbs)
-      fill.proposals.gibbs(proposals, direction, states)
+      fill.proposals.gibbs(proposals, index, states)
     else
-      fill.proposals.mvnorm(proposals, states)
+      fill.proposals.mvnorm(proposals, index, states)
     
     # Accept or reject proposals
     # Proposals outside the parameter's domain are skipped.
@@ -368,11 +389,21 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
 
     if (verbose) {
       if (extremely.verbose) {
-        message("States after step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
+        message("States after step ", step,
+                if (directional.metropolis.gibbs)
+                  paste0(" (direction ", index, ")")
+                else if (length(blocks) > 0)
+                  paste0(" (block ", index, ": ", paste0(blocks[[index]], collapse=", ") ,")")
+                else "")
         states.signif <- states[, lapply(.SD, function(c) { if (is.numeric(c)) signif(c, 3) else c } )]
         message(paste0("  ", capture.output(print(states.signif)), collapse="\n"))
       } else
-        message("Completed step ", step, if (directional.metropolis.gibbs) paste0(" (direction ", direction, ")") else "")
+        message("Completed step ", step,
+                if (directional.metropolis.gibbs)
+                  paste0(" (direction ", index, ")")
+                else if (length(blocks) > 0)
+                  paste0(" (block ", index, ": ", paste0(blocks[[index]], collapse=", ") ,")")
+                else "")
       message("Chain extension attempts: ", sum(extend))
       message("Valid proposal ratio over extension attempts: ", signif(proposals[extend, mean(valid)], 3))
       message("Finite-LL proposal ratio over extension attempts: ", signif(proposals[extend, mean(is.finite(ll))], 3))
@@ -382,11 +413,16 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
     }
 
     # Update the proposal distribution, smoothly over about proposal.update.rate steps.
-    Vproposal.update <- ((proposal.update.rate > 0) &&
-                         (!directional.metropolis.gibbs || (direction == length(variables))))
-    if (Vproposal.update) {
-      Vproposal <- Vproposal * (1 - proposal.update.rate) + cov(states[, varnames, with=FALSE]) * proposal.update.rate
-      Vproposal.clamp()
+    if ((proposal.update.rate > 0) && directional.metropolis.gibbs && (index == length(variables))) {
+      # When using Gibbs sampling, update the covariance matrix only after sampling the last principal component
+      Vproposal.log <- 1
+      Vproposal[[1]] <- Vclamp(Vproposal[[1]] * (1 - proposal.update.rate) + cov(states[, varnames, with=FALSE]) * proposal.update.rate, states)
+    } else if ((proposal.update.rate > 0) && !directional.metropolis.gibbs) {
+      # Otherwise, update the covariance matrix for each block separately
+      Vproposal.log <- index
+      Vproposal[[index]] <- Vclamp(Vproposal[[index]] * (1 - proposal.update.rate) + cov(states[, blocks[[index]], with=FALSE]) * proposal.update.rate, states)
+    } else {
+      Vproposal.log <- NULL
     }
     
     # Update the proposal radius to meet the acceptance target, smoothly over about proposal.update.rate steps.
@@ -400,15 +436,14 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
       gamma <- 0.1
       r <- proposal.update.rate * gamma * sum(extend) / (1 + gamma * sum(extend))
       f <- max(0.5, min(f.raw ^ r, 2))
-      Rproposal[direction] <- max(minimal.Rproposal, Rproposal[direction] * f)
+      Rproposal[index] <- max(minimal.Rproposal, Rproposal[index] * f)
     }
     
-    if (verbose && Vproposal.update) {
+    if (verbose && !is.null(Vproposal.log)) {
       message("Updated proposal distribution after step ", step)
-      message("  covariance matrix V:")
-      message(paste0("    ", capture.output(print(signif(Vproposal, 3))), collapse="\n"))
+      message(paste0("  ", capture.output(print(signif(Vproposal[[Vproposal.log]], 3))), collapse="\n"))
       if (!is.null(acceptance.target))
-        message("  radius R: ", paste(signif(Rproposal, 3), collapse=" "))
+        message("  radii: ", paste(signif(Rproposal, 3), collapse=" "))
     }
     
     # Store samples
@@ -419,11 +454,12 @@ mcmc <- function(llfun, variables, fixed=character(), llfun.average=1,
   # Return result
   result.data <- list(
     variables=variables,
+    fixed=fixed,
     llfun=llfun,
     arguments=list(
       llfun.average=llfun.average, steps=steps, accepts=accepts, chains=chains, candidate.samples=chains,
       initial.samplewithreplacement=initial.samplewithreplacement,
-      acceptance.target=acceptance.target, directional.metropolis.gibbs=directional.metropolis.gibbs,
+      acceptance.target=acceptance.target, directional.metropolis.gibbs=directional.metropolis.gibbs, blocks=blocks,
       initial.Rproposal=initial.Rproposal, minimal.Rproposal=minimal.Rproposal,
       initial.Vproposal=initial.Vproposal, minimal.Vproposal.CV=minimal.Vproposal.CV, maximal.Vproposal.corr=maximal.Vproposal.corr,
       proposal.update.rate=proposal.update.rate, delta.ll.cutoff=delta.ll.cutoff, initial.ll.cutoff=initial.ll.cutoff))
