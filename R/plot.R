@@ -3,7 +3,7 @@ plot.data <- function(posterior, data, include=character()) {
   aux <-  c(posterior$auxiliary$ll, posterior$auxiliary$cc, posterior$auxiliary$sc, posterior$auxiliary$rs)
   include <- setdiff(include, aux)
   if ("SANMCMC" %in% class(data)) {
-    # Collect auxiliary data columns
+    # Collect auxiliary data columns, rename ll to ll_tot
     d <- data$final[, c("ll", aux), with=FALSE]
     colnames(d)[1] <- "ll_tot"
     d
@@ -11,6 +11,12 @@ plot.data <- function(posterior, data, include=character()) {
     if (all(c("ll_tot", aux) %in% colnames(data)))
       # Collect auxiliary data columns
       data[, c("ll_tot", aux, include), with=FALSE]
+    else if (all(c("ll", aux) %in% colnames(data))) {
+      # Collect auxiliary data columns, rename ll to ll_tot
+      d <- data[, c("ll", aux), with=FALSE]
+      colnames(d)[1] <- "ll_tot"
+      d
+    }  
     else if (all(pars %in% colnames(data)))
       # Collect parameter columns and re-simulate model
       posterior$loglikelihood(data[, pars, with=FALSE])
@@ -40,7 +46,7 @@ plot.SANPosterior <- function(posterior, data, ll="ll_tot", plotlist=FALSE, rs_d
   # to be used to color trajectories. Since there are no further nesting levels, simply
   # strip any leadind dot left in place
   if (startsWith(ll, "."))
-    ll <- substring(ll, 2, strlen(ll))
+    ll <- substring(ll, 2, nchar(ll))
   # Convert input data (MCMC results, parameter vector or result of posterior$loglikelihood) into usable form
   data <- as.data.table(plot.data(posterior, data, include=as.character(ll)))
   data[, index := 1:.N ]
