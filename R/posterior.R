@@ -522,13 +522,23 @@ san_posterior_combine <- function(..., components=list(), parametrization=NULL, 
   environment(loglikelihood) <- env
   env$loglikelihood <- loglikelihood
   
+  component.prefix.adder <- function(auxcat) {
+    function(comp) {
+      l <- components[[comp]]$auxiliary[[auxcat]]
+      if (!is.null(l) && (length(l) > 0))
+        return(paste0(comp, ".", l))
+      else
+        return(l)
+    }
+  }
+  
   return(structure(list(
     loglikelihood=loglikelihood,
     parameters=parameters,
     auxiliary=list(ll=unlist(lapply(names(components), function(n) paste0(n, ".", c("ll_tot", components[[n]]$auxiliary$ll)))),
-                   cc=unlist(lapply(names(components), function(n) paste0(n, ".", components[[n]]$auxiliary$cc))),
-                   rs=unlist(lapply(names(components), function(n) paste0(n, ".", components[[n]]$auxiliary$sc))),
-                   sc=unlist(lapply(names(components), function(n) paste0(n, ".", components[[n]]$auxiliary$rs)))),
+                   cc=unlist(lapply(names(components), component.prefix.adder("cc"))),
+                   sc=unlist(lapply(names(components), component.prefix.adder("sc"))),
+                   rs=unlist(lapply(names(components), component.prefix.adder("rs")))),
     components=components
   ), class=c("SANCombinedPosterior", "SANPosterior")))
 }
