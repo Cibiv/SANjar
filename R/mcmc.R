@@ -583,7 +583,7 @@ bandwidth.matrix.SANMCMC <- function(sanmcmc, H="auto") {
 #' Computes the MAP (maximum a-posteriori) estimate from MCMC results
 #' 
 #' @export
-map.estimate.SANMCMC <- function(sanmcmc, ms.tolerance=0.1, H.adjust=1.0, H="Hpi", method="max.local.lh.avg", ms=NULL) {
+map.estimate.SANMCMC <- function(sanmcmc, ms.tolerance=0.1, H.adjust=1.0, H="auto", method="max.local.lh.avg", ms=NULL) {
   # Get posterior samples as a matrix with one column per variable, one row per sample 
   final.ll <- sanmcmc$final[, ll]
   final <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
