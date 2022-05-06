@@ -544,8 +544,11 @@ bandwidth.matrix.default <- function(x, H="auto") {
                 "and columns as the posterior has variables")
     } else stop("If H is numeric, it must either be a vector or a matrix")
   } else {
+    # The plug-in estimator in the ks package errors out for 1-D data,
+    # and is unbearably slow for more than 6-D data, so use the crude
+    # estimator we call "silverman.cov" instead.
     if (as.character(H) == "auto")
-      H <- if (d <= 6) "Hpi" else "silverman.cov"
+      H <- if ((d >= 2) && (d <= 6)) "Hpi" else "silverman.cov"
     # Bandwith H must be estimated
     if (as.character(H) == "silverman.cov") {
       # Determine bandwith matrix H by scaling the empirical covariance matrix
