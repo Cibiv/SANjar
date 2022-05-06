@@ -1,0 +1,141 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+```{r}
+library(parallel)
+library(data.table)
+library(SANjar)
+library(SANjar.data.lt48)
+library(ggplot2)
+```
+
+Define posterior distribution
+=============================
+
+## First, define a parametrization
+
+Here, we define a single variable that gets used for $g_S$, $g_A$ up to day 40. We further specify that deviations of the rank-size distribution should be computed only on days 11 and 40, and that S-cell counts should not be reported for any day.
+
+```{r}
+pr <- san_parametrization(list(`40SA`=range(0, 4)), basemodel=lt47.model,
+                          rs_days=c(11, 40), sc_day=c())
+```
+
+## Then, turn the parametrization into a posterior likelihood
+
+The data to evaluate the model against must be provided as an object of type "LTData". Here, we just use the pre-packages LT47 data.
+
+```{r}
+pd <- san_posterior(pr, lt47)
+```
+
+## Evaluating posterior likelihoods
+
+Using the `loglikelihood` function in the posterior distribution object, the posterior likelihood can be evaluated for a single or multiple combinations of parameters.
+
+The result contains the following columns
+
+| Field            | Description |
+|------------------|----------------------------------|
+| `ll_tot`         | the total posterior likelihood   |
+| `ll_cc`          | the partial posterior likelihood for total cell counts |
+| `ll_rs_<day>`    | the partial poisterior likelihood for rank-sizes on day `<day>` |
+| `CC<day>`        | the total cell count on day `<day>` |
+| `SC<day>`        | the S-cell count on day `<day>` |
+| `RS<day>_<rank>` | the rank-size for rank `<rank>` on day `<day>` |
+
+```{r}
+ll <- pd$loglikelihood(data.table(`40SA`=c(1.4,1.5,1.6,1.7)))
+ll
+```
+
+The resulting trajectories can be plotted against the empirically observed intervals
+
+```{r}
+plot(pd, ll, rs_days=c(11, 40))
+```
+
+## Combining posterior distributions
+
+Two posterior distribution objects can be combined into a single object, which results in a distribution whose likelihood is the sum of the two likelihoods. This can be used to evaluate parameters for two separate datasets and combine the results
+
+```{r}
+pr.lt48 <- san_parametrization(list(`40SA`=range(0, 4)), basemodel=lt47.model,
+                               rs_days=c(11, 42), sc_day=c())
+
+pd.wt <- san_posterior(pr.lt48, lt48.knockout[condition="PAX6", lib="wt"])
+pd.ko <- san_posterior(pr.lt48, lt48.knockout[condition="PAX6", lib="ko"])
+pd.wt_and_ko <- san_posterior_combine(wt=pd.wt, ko=pd.ko)
+```
+
+The result returned by `loglikelihood` then contains column `ll_tot` containing the total likelihood (i.e. the sum of the individual likelihoods of the component distributions) and one set of meta-data columns for each component, prefixed with the component name specified when the combined posterior distribution object was created.
+
+```{r}
+ll.wt_and_ko <- pd.wt_and_ko$loglikelihood(data.table(`40SA`=c(1.6,1.7)))
+ll.wt_and_ko
+```
+```{r}
+plot(pd.wt_and_ko, ll.wt_and_ko, rs_days=c(42))
+```
+
+## Parallelizing likelihood computations
+
+First, a cluster must be created using one of the cluster creation functions from the `parallel` package
+
+```{r}
+cl <- makePSOCKcluster(8)
+```
+
+Then, a parallel version of an existing posterior distribution object can be created using `san_posterior_parallel`
+
+```{r}
+pd.parallel <- san_posterior_parallel(pd, cl)
+```
+
+Parallel distribution objects are used just as serial ones
+
+```{r}
+ll.par <- pd.parallel$loglikelihood(data.table(`40SA`=c(1.4,1.5,1.6,1.7)))
+ll.par
+```
+
+The resulting trajectories can be plotted against the empirically observed intervals
+
+```{r}
+plot(pd, ll.par, rs_days=c(11, 40))
+```
+
+Running MCMC
+============
+
+The `mcmc` function samples from the specified posterior distribution. Each chain is run for the specified number of steps, and it's final value is used a one sample. The `candidates` are used to initialize the chains. If more candidates than chains are specified, the candidates are split across chains and are successively used as proposals in an independent-proposal MCMC to select each chain's starting value.
+
+```{r}
+mc <- mcmc(pd.parallel$loglikelihood, variables=pr$ranges, chains=8, steps=10,
+           candidates=sample.variables(40, pr$ranges), verbose=TRUE)
+```
+
+The resulting obtains contains the final value of each chain, which represent (if the number of steps was sufficient) independent samples taken from the posterior,
+
+```{r}
+print(mc$final)
+```
+
+The posterior density can be plotted as violin plots
+
+```{r}
+plot(mc)
+```
+
+and various summary statistics of the posterior distribution can be computed
+
+```{r}
+summarystats(mc)
+```
+It's also possible to plot the individual trajectories for the final parameter values
+
+```{r}
+plot(pd, mc$final, rs_days=c(40))
+```
