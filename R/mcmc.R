@@ -587,14 +587,23 @@ map.estimate.SANMCMC <- function(sanmcmc, ms.tolerance=0.1, H.adjust=1.0, H="aut
   # Get posterior samples as a matrix with one column per variable, one row per sample 
   final.ll <- sanmcmc$final[, ll]
   final <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
-  # Run mean-shift algorithm unless mean-shift results are provided (see meanshift()).
-  # This algorithm finds a set of modes (i.e. local density maxima), and assigns each
-  # sample to one of these modes. The mean-shift algorithm thus is not only a mode-finding
-  # algorithm, but also an (unsupervised) clustering algorithm.
-  if (is.null(ms)) {
+  # Run mean-shift algorithm, or directly obtain the mode from the KDE (for 1-D data)
+  if (is.null(ms) && (length(sanmcmc$variables) > 1)) {
+    # Run mean-shift algorithm unless mean-shift results are provided (see meanshift()).
+    # This algorithm finds a set of modes (i.e. local density maxima), and assigns each
+    # sample to one of these modes. The mean-shift algorithm thus is not only a mode-finding
+    # algorithm, but also an (unsupervised) clustering algorithm.
     x <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
     H <- bandwidth.matrix(x, H)
     ms <- ks::kms(x, H=H*(H.adjust^2), min.clust.size=0.1*nrow(x), tol.clust=ms.tolerance)
+  } else if (is.null(ms) && (length(sanmcmc$variables) == 1)) {
+    # The ks package seems to have problems with 1-D data, so use KDE to locate the mode
+    x <- as.matrix(sanmcmc$final[, names(sanmcmc$variables), with=FALSE])
+    H <- bandwidth.matrix(x, H)
+    d <- density(x[, 1], bw=H, n=1024)
+    m <- d$x[which.max(d$x)]
+    names(m) <- names(sanmcmc$variables)
+    return(m)
   }
   # Pick the "maximal" mode
   # Which mode constitutes the "maximum" depends on the metric used to compare the modes
