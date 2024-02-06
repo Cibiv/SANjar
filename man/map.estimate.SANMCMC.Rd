@@ -8,7 +8,7 @@
   sanmcmc,
   ms.tolerance = 0.1,
   H.adjust = 1,
-  H = "Hpi",
+  H = "auto",
   method = "max.local.lh.avg",
   ms = NULL
 )

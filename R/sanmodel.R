@@ -3,6 +3,13 @@
 #' @export
 san_model <- function(x, ...) UseMethod("san_model")
 
+#' Simulate a SANModel
+#' 
+#' @export
+simulate <- function(x, ...) UseMethod("simulate")
+
+
+
 #' Create a SANModel from a rates table and an initial number of cells
 #'
 #' @export

@@ -8,6 +8,7 @@ mcmc(
   llfun,
   variables,
   fixed = character(),
+  blocks = NULL,
   llfun.average = 1,
   steps = NA,
   accepts = NA,
@@ -19,8 +20,8 @@ mcmc(
   keep.history = FALSE,
   keep.initial = FALSE,
   keep.candidates = FALSE,
-  acceptance.target = if ((length(variables) == 1) || directional.metropolis.gibbs)
-    0.44 else 0.234,
+  acceptance.target = if ((length(variables) == 1) || directional.metropolis.gibbs) 0.44
+    else 0.234,
   directional.metropolis.gibbs = FALSE,
   initial.Rproposal = 1,
   minimal.Rproposal = 0.2,
