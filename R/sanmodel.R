@@ -124,14 +124,14 @@ simulate.SANModel <- function(model, template, steps=c("aliases", "seqsim", "thr
     r <- san_sequencing(r, .SD, steps=steps, method.seqsim=method.seqsim)
     # Generate lineage size table
     if ("seqsim" %in% steps)
-      r[, list(day, reads=R, cells=C.obs)]
+      r[, list(day, reads=R, cells=C.obs, S, A, N)]
     else
-      r[, list(day, cells=C)]
+      r[, list(day, cells=C, S, A, N)]
   }, by=c(template$groups, "sid")]
   
   organoidsizes <- template$sequencing[, {
     san_deterministic(s0=model$s0, rates=ratestable.fill.na(model$rates), samples_per_day=1)[, list(
-      day=t, cells=S+A+N
+      day=t, cells=S+A+N, S, A, N
     )]
   }, by=template$groups]
   
