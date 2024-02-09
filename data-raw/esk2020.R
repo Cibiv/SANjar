@@ -34,11 +34,11 @@ h9_organoidsizes <- rbind(
 setkey(h9_organoidsizes, day, rep)
 
 message("*** Importing lineage sizes from data-raw/lt47_h9_only.tsv")
-lt47_ls <- data.table(read.table("data-raw/lt47_h9_only.tsv", header=TRUE,
+esk2020_ls <- data.table(read.table("data-raw/lt47_h9_only.tsv", header=TRUE,
                                  sep="\t", quote="\"", stringsAsFactors=FALSE))
 
 message("*** Converting lineage sizes into data.table")
-lt47_ls <- lt47_ls[, {
+esk2020_ls <- esk2020_ls[, {
   #    m <- regexec("^(\\d+)-H9-day(\\d\\d)-(\\d)+(-PCR\\d)?$", Sample)
   m <- regexec("^H9-day(\\d\\d)-(\\d+)$", Sample)
   stopifnot(all(sapply(m, `[`, 1) > 0))
@@ -47,20 +47,20 @@ lt47_ls <- lt47_ls[, {
   list(sample=as.factor(Sample), sid=sid, day=day, reads=as.integer(nLineages))
 }]
 last_sid <- 0L
-lt47_ls[, sid := { last_sid <<- last_sid + 1L }, by=c("day", "sid")]
-setkey(lt47_ls, day, sid)
+esk2020_ls[, sid := { last_sid <<- last_sid + 1L }, by=c("day", "sid")]
+setkey(esk2020_ls, day, sid)
 
 message("*** Creating LTData instance")
-lt47 <- SANjar::LTData(organoidsizes=h9_organoidsizes,
-                       lineagesizes=lt47_ls[!(sid %in% c(15, 16))],
-                       unit="reads")
+esk2020 <- SANjar::LTData(organoidsizes=h9_organoidsizes,
+                          lineagesizes=esk2020_ls[!(sid %in% c(15, 16))],
+                          unit="reads")
 
 message("*** Estimating PCR and sequencing parameters")
-lt47 <- SANjar::estimate_sequencing_parameters(lt47)
+esk2020 <- SANjar::estimate_sequencing_parameters(esk2020)
 
 message("*** Translating lineage sizes from #reads to #cells")
-lt47 <- SANjar::estimate_reads_per_cell(lt47, method="singleton_mode")
-lt47 <- SANjar::absolute_lineage_sizes(lt47)
+esk2020 <- SANjar::estimate_reads_per_cell(esk2020, method="singleton_mode")
+esk2020 <- SANjar::absolute_lineage_sizes(esk2020)
 
-message("*** Saving lt47 to data/lt47.RData")
-save(lt47, file="data/lt47.RData", version=2)
+message("*** Saving esk2020 to data/esk2020.RData")
+save(esk2020, file="data/esk2020.RData", version=2)

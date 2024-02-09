@@ -1,7 +1,13 @@
-#' The estimated SAN model parameters for the LT47 dataset
+#' The estimated SAN model parameters for the data from Esk et al., 2020
+"esk2020.model"
+
+#' The estimated SAN model parameters for the LT47 dataset (same as esk2020.model)
 "lt47.model"
 
-#' The LT47 cerebral organoid lineage tracing dataset
+#' The cerebral organoid lineage tracing dataset from Esk et al., 2020
+"esk2020"
+
+#' The LT47 cerebral organoid lineage tracing dataset (same as esk2020)
 "lt47"
 
 #' Create a lineage tracing data object

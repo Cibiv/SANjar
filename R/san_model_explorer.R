@@ -22,7 +22,7 @@ san_model_explorer <- function(..., location.models=".") {
   app_env$DATASETS <- Filter(function(p) class(p)=="LTData", ps)
   app_env$MODELS <- Filter(function(p) class(p)=="SANModel", ps)
   if (length(app_env$MODELS) == 0)
-    app_env$MODELS <- list(`lt47`=lt47.model)
+    app_env$MODELS <- list(`esk2020`=esk2020.model)
   app_env$DEFAULT.MODEL <- paste0("preset:", names(app_env$MODELS)[1])
   
   

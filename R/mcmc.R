@@ -1,4 +1,7 @@
-#' The MCMC results for the LT47 dataset
+#' The MCMC results for the esk2020 dataset
+"esk2020.mcmc"
+
+#' The MCMC results for the LT47 dataset (same as esk2020.mcmc)
 "lt47.mcmc"
 
 #' Find a suitable bandwidth matrix for kernel density estimation 

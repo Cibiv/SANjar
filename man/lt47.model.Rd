@@ -3,7 +3,7 @@
 \docType{data}
 \name{lt47.model}
 \alias{lt47.model}
-\title{The estimated SAN model parameters for the LT47 dataset}
+\title{The estimated SAN model parameters for the LT47 dataset (same as esk2020.model)}
 \format{
 An object of class \code{SANModel} of length 2.
 }
@@ -11,6 +11,6 @@ An object of class \code{SANModel} of length 2.
 lt47.model
 }
 \description{
-The estimated SAN model parameters for the LT47 dataset
+The estimated SAN model parameters for the LT47 dataset (same as esk2020.model)
 }
 \keyword{datasets}

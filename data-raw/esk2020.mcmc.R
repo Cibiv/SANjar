@@ -7,7 +7,7 @@ message("*** Synthesizing a SANjar-compatible SANMCMC object")
 # current mcmc function (e.g. initial.samples -> candidate.samples)
 # The likelihood function is set to NULL, including this would require including the whole san_posterior() implemention
 # from the SVN repository.
-lt47.mcmc <- structure(
+esk2020.mcmc <- structure(
   list(
     variables=list(`11S`=c(0, 4), `11R`=c(0, 4), `40S`=c(0, 4), `40A`=c(0, 4), `40N`=c(0, 4), `40D`=c(0, 4)),
     llfun=NULL,
@@ -22,5 +22,5 @@ lt47.mcmc <- structure(
     final=LT47.MCMCABC$final),
   class="SANMCMC")
 
-message("*** Saving MCMC results lt47.mcmc to data/lt47.mcmc.RData")
-save(lt47.mcmc, file="data/lt47.mcmc.RData", version=2)
+message("*** Saving MCMC results esk2020.mcmc to data/esk2020.mcmc.RData")
+save(esk2020.mcmc, file="data/esk2020.mcmc.RData", version=2)
